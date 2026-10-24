@@ -1,6 +1,9 @@
 name: Add app icons
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/icons.yml"
 permissions:
   contents: write
 jobs:
