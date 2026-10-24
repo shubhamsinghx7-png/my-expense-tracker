@@ -1,7 +1,7 @@
 // Service worker: lets the installed app open offline.
 // It caches only this app's own static files. Expense entries are
 // NOT cached here - they live in the browser's local storage already.
-var CACHE = "expense-tracker-v3";
+var CACHE = "expense-tracker-v4";
 var FILES = [
   "./",
   "index.html",
