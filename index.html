@@ -751,15 +751,22 @@ function pick(kind) {
 // numbers - plain arithmetic, shown as-is. Not AI.
 var COON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 170"> <ellipse cx="100" cy="150" rx="58" ry="8" fill="#e8ded5"/> <path d="M138 138 q34 -6 30 -40 q-2 -18 -20 -22 q16 10 8 30 q-8 18 -30 22 z" fill="#8f9aa6" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M148 122 l14 4 M152 106 l12 2" stroke="#26221f" stroke-width="5" stroke-linecap="round"/> <rect x="62" y="96" width="76" height="48" rx="22" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M60 60 L48 34 L78 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M140 60 L152 34 L122 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <circle cx="100" cy="74" r="36" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M64 66 q12 -10 24 -4 q-6 12 -16 12 q-8 0 -8 -8 Z" fill="#3a3f46"/> <path d="M136 66 q-12 -10 -24 -4 q6 12 16 12 q8 0 8 -8 Z" fill="#3a3f46"/> <path d="M64 66 Q100 50 136 66 Q100 58 64 66 Z" fill="#3a3f46"/> <circle cx="82" cy="70" r="4.5" fill="#ffffff"/> <circle cx="118" cy="70" r="4.5" fill="#ffffff"/> <circle cx="82" cy="70" r="2.2" fill="#26221f"/> <circle cx="118" cy="70" r="2.2" fill="#26221f"/> <ellipse cx="100" cy="86" rx="7" ry="5" fill="#3a3f46"/> <path d="M94 96 q6 5 12 0" fill="none" stroke="#26221f" stroke-width="4" stroke-linecap="round"/> <circle cx="100" cy="122" r="15" fill="#f6f2ec" stroke="#26221f" stroke-width="5"/> <text x="100" y="128" font-family="DejaVu Sans" font-size="16" font-weight="bold" fill="#26221f" text-anchor="middle">&#8377;</text> </svg>';
 
-// Set after you add an expense; shown once on the History screen.
+// Set after you add an expense; shown briefly on the History
+// screen, then it clears itself after a few seconds.
 var justAddedAmount = null;
+var toastTimer = null;
 function paintToast() {
   var el = document.getElementById("addedToast");
+  if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
   if (justAddedAmount !== null) {
     el.innerHTML = '<div class="toast"><span class="coon" aria-hidden="true">' + COON + '</span>' +
       '<span>Noted. ' + rupees(justAddedAmount) + ' accounted for.</span>' +
       '<span class="tick" aria-hidden="true">&#10003;</span></div>';
     justAddedAmount = null;
+    toastTimer = setTimeout(function () {
+      el.innerHTML = "";
+      toastTimer = null;
+    }, 4500);   // the note fades away on its own
   } else {
     el.innerHTML = "";
   }
