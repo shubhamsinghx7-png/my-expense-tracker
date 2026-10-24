@@ -1,11 +1,15 @@
 <!DOCTYPE html>
 <!--
-  My expense tracker - version 2
+  My expense tracker - version 3
   ------------------------------------------------------------------
   This whole app is ONE file. It runs in your phone's browser.
   Your expenses are saved ONLY on this phone (in this browser's
   local storage). Nothing is sent anywhere - there is no account,
   no server, and no internet needed after the app is installed.
+
+  New in version 3: a visual restyle only - cleaner, more modern
+  look with a few playful doodle touches. Same features, same
+  saved data, same storage keys. Nothing about your entries changed.
 
   New in version 2: every expense can carry a Need/Want label that
   YOU set (tap the label on any entry to change it), and a
@@ -33,20 +37,26 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <title>My expense tracker</title>
 <style>
-  /* Colours: sand background, white card, dark ink, teal for
-     "known" numbers, red only for the delete-all action. */
+  /* Colours: warm paper ground, clean white cards, dark ink,
+     deep green for actions and "known" numbers, lime for the
+     picked state, pink only for tiny doodle accents,
+     red only for the delete-all action. */
   :root {
-    --ground: #f4efec;
-    --ink: #251f21;
-    --ink-2: #585254;
-    --hairline: #eae9ea;
-    --teal: #4e7d70;
+    --ground: #f6f2ec;
+    --ink: #221d1a;
+    --ink-2: #6d655e;
+    --hairline: #ece5dc;
+    --teal: #2f6f5e;
+    --lime: #b8f04a;
+    --pink: #ff8fb1;
     --red: #d3252f;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
     background: var(--ground);
+    background-image: radial-gradient(#e9e0d3 1px, transparent 1px);
+    background-size: 24px 24px;
     color: var(--ink);
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     font-size: 16px;
@@ -55,83 +65,104 @@
   main {
     max-width: 480px;
     margin: 0 auto;
-    padding: 16px;
+    padding: 20px 16px 32px;
   }
-  h1 { font-size: 26px; margin: 8px 0 2px; }
-  h2 { font-size: 19px; margin: 24px 0 8px; }
-  .sub { color: var(--ink-2); font-size: 14px; margin: 0 0 8px; }
+  h1 { font-size: 27px; margin: 4px 0 0; letter-spacing: -0.02em; }
+  h2 { font-size: 17px; margin: 0 0 10px; letter-spacing: -0.01em; }
+  .sub { color: var(--ink-2); font-size: 14px; margin: 4px 0 0; }
+  /* Modern cards: soft shadow, generous radius. The wonky
+     hand-drawn borders from the mockup stay out of the way -
+     "imperfect" lives in the doodles, not the layout. */
   section {
     background: #ffffff;
     border: 1px solid var(--hairline);
-    border-radius: 12px;
-    padding: 16px;
-    margin-top: 12px;
+    border-radius: 18px;
+    padding: 18px;
+    margin-top: 14px;
+    box-shadow: 0 1px 2px rgba(34,29,26,0.05), 0 10px 28px rgba(34,29,26,0.06);
+    position: relative;
   }
-  label, .grouplabel { display: block; font-size: 14px; color: var(--ink-2); margin: 10px 0 4px; }
+  label, .grouplabel { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 12px 0 6px; }
   input, select {
     width: 100%;
     font-size: 16px;              /* stops iOS/Android zoom-on-focus */
-    padding: 12px;
-    border: 1px solid var(--hairline);
-    border-radius: 8px;
-    background: #fff;
+    padding: 12px 14px;
+    border: 1.5px solid var(--hairline);
+    border-radius: 12px;
+    background: #fdfcfa;
     color: var(--ink);
   }
+  input:focus, select:focus { outline: 2px solid var(--teal); outline-offset: 1px; }
   button {
     min-height: 44px;             /* comfortable touch target */
     font-size: 16px;
+    font-weight: 600;
     border: none;
-    border-radius: 8px;
+    border-radius: 12px;
     padding: 12px 16px;
     cursor: pointer;
   }
   .primary { background: var(--teal); color: #fff; width: 100%; margin-top: 14px; }
+  .primary:active { transform: translateY(1px); }
   .link { background: none; color: var(--ink-2); text-decoration: underline; padding: 8px; }
-  .danger { background: none; color: var(--red); font-size: 14px; margin-top: 8px; }
-  /* Need/Want picker in the add form: two side-by-side choices. */
-  .kindrow { display: flex; gap: 8px; margin-top: 4px; }
+  .danger { background: none; color: var(--red); font-size: 14px; margin-top: 12px; }
+  /* Need/Want picker: a modern segmented control. The picked
+     one gets the playful touch - lime sticker with a tiny tilt. */
+  .kindrow { display: flex; gap: 10px; margin-top: 4px; }
   .kindbtn {
     flex: 1;
-    background: #fff;
-    color: var(--ink);
-    border: 1px solid var(--hairline);
+    background: #fdfcfa;
+    color: var(--ink-2);
+    border: 1.5px dashed var(--hairline);
     font-size: 15px;
   }
-  .kindbtn.on { background: var(--teal); border-color: var(--teal); color: #fff; }
+  .kindbtn.on {
+    background: var(--lime);
+    border: 1.5px solid var(--ink);
+    color: var(--ink);
+    transform: rotate(-1.2deg);
+    box-shadow: 2.5px 2.5px 0 var(--ink);
+  }
   /* The little label under each saved entry. Tap it to change it. */
   .chip {
     min-height: 32px;
     margin-top: 4px;
     padding: 3px 12px;
     font-size: 13px;
-    border: 1px dashed var(--hairline);
+    font-weight: 600;
+    border: 1.5px dashed var(--hairline);
     border-radius: 999px;
     background: none;
     color: var(--ink-2);
   }
   .chip.need { border-style: solid; border-color: var(--teal); color: var(--teal); }
   .chip.want { border-style: solid; border-color: var(--ink); color: var(--ink); }
-  .nw { display: flex; gap: 14px; flex-wrap: wrap; font-weight: 600; margin: 4px 0 2px; }
+  .nw { display: flex; gap: 14px; flex-wrap: wrap; font-weight: 600; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
   .nw .un { color: var(--ink-2); font-weight: 400; }
   .insight { font-size: 15px; margin: 10px 0 0; }
   .remaining {
-    font-size: 30px;
-    font-weight: 600;
+    font-size: 34px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
     color: var(--teal);
-    margin: 4px 0;
+    margin: 8px 0 2px;
+    display: inline-block;
+    background: linear-gradient(transparent 62%, #ffe27a 62%);
+    padding: 0 4px;
   }
-  .over { color: var(--red); }
+  .over { color: var(--red); background: linear-gradient(transparent 62%, #ffd0d4 62%); }
   .entry {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 0;
-    border-top: 1px solid var(--hairline);
+    padding: 12px 0;
+    border-top: 1px dashed var(--hairline);
   }
   .entry:first-of-type { border-top: none; }
   .entry .what { flex: 1; }
   .entry .note { color: var(--ink-2); font-size: 14px; }
-  .entry .amt { font-weight: 600; }
+  .entry .amt { font-weight: 700; font-variant-numeric: tabular-nums; }
   .del {
     min-height: 36px;
     min-width: 44px;
@@ -139,22 +170,35 @@
     color: var(--ink-2);
     font-size: 18px;
   }
-  .totals { color: var(--ink-2); font-size: 14px; margin-top: 10px; }
+  .totals { color: var(--ink-2); font-size: 14px; margin-top: 10px; font-variant-numeric: tabular-nums; }
   .totals span { display: inline-block; margin-right: 12px; }
   .empty { color: var(--ink-2); font-size: 14px; }
   .err { color: var(--red); font-size: 14px; min-height: 20px; margin-top: 6px; }
+  /* --- the few deliberately-imperfect touches --- */
+  .squiggle { display: block; margin: 2px 0 0 2px; }
+  /* a strip of washi tape on the first card */
+  .tape {
+    position: absolute; top: -10px; left: 50%; width: 78px; height: 20px;
+    background: rgba(255, 214, 102, 0.7);
+    transform: translateX(-50%) rotate(-2.5deg);
+    border-left: 2px dashed rgba(0,0,0,0.12);
+    border-right: 2px dashed rgba(0,0,0,0.12);
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
 <main>
 
   <h1>My expense tracker</h1>
+  <svg class="squiggle" width="150" height="9" viewBox="0 0 150 9" aria-hidden="true"><path d="M2 5 Q 19 1 36 5 T 70 5 T 104 5 T 148 5" fill="none" stroke="#ff8fb1" stroke-width="3.5" stroke-linecap="round"/></svg>
   <p class="sub">Saved only on this phone. This app sends nothing anywhere.</p>
   <p class="err" id="storageWarn" style="display:none"></p>
 
   <!-- Weekly limit: you choose the number. The app shows what is
        left after this week's logged expenses. Week starts Monday. -->
   <section>
+    <div class="tape" aria-hidden="true"></div>
     <h2>This week</h2>
     <label for="limit">Weekly spending limit (&#8377;)</label>
     <input id="limit" type="number" inputmode="numeric" min="0" placeholder="e.g. 1500">
