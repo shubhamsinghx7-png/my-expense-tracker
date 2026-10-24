@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<!--
+  My expense tracker - version 2
+  ------------------------------------------------------------------
+  This whole app is ONE file. It runs in your phone's browser.
+  Your expenses are saved ONLY on this phone (in this browser's
+  local storage). Nothing is sent anywhere - there is no account,
+  no server, and no internet needed after the app is installed.
+
+  New in version 2: every expense can carry a Need/Want label that
+  YOU set (tap the label on any entry to change it), and a
+  "Needs and wants" section that shows simple on-phone calculations
+  about your spending. Those calculations are not AI and not
+  predictions - just arithmetic on what you logged.
+
+  How to read this file: the styles are at the top, the screen
+  layout is in the <body>, and the logic is in the <script> at the
+  bottom. Each part is commented so you can change it yourself.
+
+  Build steps to try next, with your AI assistant:
+    2. Edit an entry after saving it.
+    3. Add a monthly total next to the weekly one.
+    4. Export the entries as a CSV file you can keep.
+    5. Let yourself add your own categories.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#f4efec">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>My expense tracker</title>
+<style>
+  /* Colours: sand background, white card, dark ink, teal for
+     "known" numbers, red only for the delete-all action. */
+  :root {
+    --ground: #f4efec;
+    --ink: #251f21;
+    --ink-2: #585254;
+    --hairline: #eae9ea;
+    --teal: #4e7d70;
+    --red: #d3252f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    line-height: 1.45;
+  }
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+  h1 { font-size: 26px; margin: 8px 0 2px; }
+  h2 { font-size: 19px; margin: 24px 0 8px; }
+  .sub { color: var(--ink-2); font-size: 14px; margin: 0 0 8px; }
+  section {
+    background: #ffffff;
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 12px;
+  }
+  label, .grouplabel { display: block; font-size: 14px; color: var(--ink-2); margin: 10px 0 4px; }
+  input, select {
+    width: 100%;
+    font-size: 16px;              /* stops iOS/Android zoom-on-focus */
+    padding: 12px;
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ink);
+  }
+  button {
+    min-height: 44px;             /* comfortable touch target */
+    font-size: 16px;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 16px;
+    cursor: pointer;
+  }
+  .primary { background: var(--teal); color: #fff; width: 100%; margin-top: 14px; }
+  .link { background: none; color: var(--ink-2); text-decoration: underline; padding: 8px; }
+  .danger { background: none; color: var(--red); font-size: 14px; margin-top: 8px; }
+  /* Need/Want picker in the add form: two side-by-side choices. */
+  .kindrow { display: flex; gap: 8px; margin-top: 4px; }
+  .kindbtn {
+    flex: 1;
+    background: #fff;
+    color: var(--ink);
+    border: 1px solid var(--hairline);
+    font-size: 15px;
+  }
+  .kindbtn.on { background: var(--teal); border-color: var(--teal); color: #fff; }
+  /* The little label under each saved entry. Tap it to change it. */
+  .chip {
+    min-height: 32px;
+    margin-top: 4px;
+    padding: 3px 12px;
+    font-size: 13px;
+    border: 1px dashed var(--hairline);
+    border-radius: 999px;
+    background: none;
+    color: var(--ink-2);
+  }
+  .chip.need { border-style: solid; border-color: var(--teal); color: var(--teal); }
+  .chip.want { border-style: solid; border-color: var(--ink); color: var(--ink); }
+  .nw { display: flex; gap: 14px; flex-wrap: wrap; font-weight: 600; margin: 4px 0 2px; }
+  .nw .un { color: var(--ink-2); font-weight: 400; }
+  .insight { font-size: 15px; margin: 10px 0 0; }
+  .remaining {
+    font-size: 30px;
+    font-weight: 600;
+    color: var(--teal);
+    margin: 4px 0;
+  }
+  .over { color: var(--red); }
+  .entry {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .entry:first-of-type { border-top: none; }
+  .entry .what { flex: 1; }
+  .entry .note { color: var(--ink-2); font-size: 14px; }
+  .entry .amt { font-weight: 600; }
+  .del {
+    min-height: 36px;
+    min-width: 44px;
+    background: none;
+    color: var(--ink-2);
+    font-size: 18px;
+  }
+  .totals { color: var(--ink-2); font-size: 14px; margin-top: 10px; }
+  .totals span { display: inline-block; margin-right: 12px; }
+  .empty { color: var(--ink-2); font-size: 14px; }
+  .err { color: var(--red); font-size: 14px; min-height: 20px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<main>
+
+  <h1>My expense tracker</h1>
+  <p class="sub">Saved only on this phone. This app sends nothing anywhere.</p>
+  <p class="err" id="storageWarn" style="display:none"></p>
+
+  <!-- Weekly limit: you choose the number. The app shows what is
+       left after this week's logged expenses. Week starts Monday. -->
+  <section>
+    <h2>This week</h2>
+    <label for="limit">Weekly spending limit (&#8377;)</label>
+    <input id="limit" type="number" inputmode="numeric" min="0" placeholder="e.g. 1500">
+    <button class="primary" id="saveLimit">Save limit</button>
+    <p class="remaining" id="remaining">-</p>
+    <p class="sub" id="spentSoFar"></p>
+  </section>
+
+  <!-- Add an expense: amount, category, an optional Need/Want
+       label, and an optional note. -->
+  <section>
+    <h2>Add an expense</h2>
+    <label for="amount">Amount (&#8377;)</label>
+    <input id="amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="e.g. 60">
+    <label for="category">Category</label>
+    <select id="category">
+      <option>Food</option>
+      <option>Travel</option>
+      <option>Shopping</option>
+      <option>Bills</option>
+      <option>College</option>
+      <option>Fun</option>
+      <option>Other</option>
+    </select>
+    <span class="grouplabel">Need or want?</span>
+    <div class="kindrow" role="group" aria-label="Need or want">
+      <button type="button" class="kindbtn" id="pickNeed" aria-pressed="false">Need</button>
+      <button type="button" class="kindbtn" id="pickWant" aria-pressed="false">Want</button>
+    </div>
+    <p class="sub">Not sure? Skip it - you can label or change any expense later.</p>
+    <label for="note">Note (optional)</label>
+    <input id="note" type="text" maxlength="60" placeholder="e.g. metro to college">
+    <p class="err" id="formError"></p>
+    <button class="primary" id="add">Add expense</button>
+  </section>
+
+  <!-- Needs vs wants this week, plus simple on-phone calculations.
+       These are arithmetic on your entries, not AI, not predictions,
+       not guarantees. -->
+  <section>
+    <h2>Needs and wants</h2>
+    <div class="nw" id="nwSplit"></div>
+    <div id="insights"></div>
+    <p class="sub">These are simple calculations from your entries, done on this phone - not AI, not predictions, not guarantees.</p>
+  </section>
+
+  <!-- This week's entries. Each one can be relabelled or deleted. -->
+  <section>
+    <h2>Logged this week</h2>
+    <div id="list"></div>
+    <p class="totals" id="totals"></p>
+  </section>
+
+  <button class="danger" id="wipe">Delete all my data on this phone</button>
+
+</main>
+
+<script>
+// Register the offline service worker (only works over HTTPS or localhost).
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(function () {
+    // Offline mode unavailable; the tracker still works online.
+  });
+}
+</script>
+<script>
+// ---------- Where the data lives ----------
+// localStorage keeps two things, only inside this browser on
+// this phone: the entries list and the weekly limit. Clearing
+// the browser's site data erases them.
+// Each entry: { id, ts, amount, category, note, kind }
+// kind is "need", "want", or missing (entries saved before labels
+// existed, or ones you chose not to label). Nothing is assigned
+// for you - a label only ever comes from your tap.
+var ENTRIES_KEY = "tracker.entries.v1";
+var LIMIT_KEY = "tracker.limit.v1";
+
+// Check at startup that saving actually works in this browser.
+// If it does not, say so on screen instead of pretending entries
+// were saved.
+var storageOK = true;
+function probeStorage() {
+  try {
+    localStorage.setItem("tracker.probe", "1");
+    var ok = localStorage.getItem("tracker.probe") === "1";
+    localStorage.removeItem("tracker.probe");
+    return ok;
+  } catch (e) { return false; }
+}
+function showStorageProblem(msg) {
+  storageOK = false;
+  var el = document.getElementById("storageWarn");
+  el.textContent = msg;
+  el.style.display = "block";
+}
+
+function loadEntries() {
+  try { return JSON.parse(localStorage.getItem(ENTRIES_KEY)) || []; }
+  catch (e) { return []; }
+}
+// Returns true if the save really worked.
+function saveEntries(entries) {
+  try {
+    localStorage.setItem(ENTRIES_KEY, JSON.stringify(entries));
+    return true;
+  } catch (e) {
+    showStorageProblem("Could not save. Storage may be unavailable or full on this browser.");
+    return false;
+  }
+}
+function loadLimit() {
+  var v = parseFloat(localStorage.getItem(LIMIT_KEY));
+  return isNaN(v) ? null : v;
+}
+function saveLimit(v) {
+  try {
+    localStorage.setItem(LIMIT_KEY, String(v));
+    return true;
+  } catch (e) {
+    showStorageProblem("Could not save. Storage may be unavailable or full on this browser.");
+    return false;
+  }
+}
+
+// ---------- Time helpers ----------
+// The week runs Monday 00:00 to Sunday 23:59.
+var DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+function startOfWeek(d) {
+  var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  var day = (x.getDay() + 6) % 7;      // Monday = 0
+  x.setDate(x.getDate() - day);
+  return x.getTime();
+}
+function thisWeekEntries() {
+  var start = startOfWeek(new Date());
+  return loadEntries().filter(function (e) { return e.ts >= start; });
+}
+function sum(list) {
+  return list.reduce(function (t, e) { return t + e.amount; }, 0);
+}
+function rupees(n) {
+  // Indian digit grouping: 1,500 not 1500
+  return "₹" + n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+}
+
+// ---------- The savings insights ----------
+// Plain calculations from the logged entries. No AI model, no
+// network. Observations and arithmetic only - no advice to cut
+// essentials, no promises.
+function buildInsights(entries, week, spent, limit) {
+  var out = [];
+  var wants = week.filter(function (e) { return e.kind === "want"; });
+  var needs = week.filter(function (e) { return e.kind === "need"; });
+  var unlabelled = week.filter(function (e) { return !e.kind; }).length;
+  var wantSum = sum(wants);
+  var needSum = sum(needs);
+
+  if (wantSum + needSum > 0) {
+    out.push("This week " + rupees(wantSum) + " went to wants - " +
+      Math.round((wantSum / (wantSum + needSum)) * 100) + "% of your labelled spending.");
+  }
+  if (wants.length > 0) {
+    var byCat = {};
+    wants.forEach(function (e) { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
+    var top = Object.keys(byCat).sort(function (a, b) { return byCat[b] - byCat[a]; })[0];
+    out.push("Biggest want this week: " + top + " (" + rupees(byCat[top]) + ").");
+  }
+  if (limit !== null && week.length > 0) {
+    var dayIdx = (new Date().getDay() + 6) % 7;   // Monday = 0
+    var projected = Math.round((spent / (dayIdx + 1)) * 7);
+    out.push(projected > limit
+      ? "At this pace, this week lands around " + rupees(projected) + " - above your " + rupees(limit) + " limit."
+      : "At this pace, this week lands around " + rupees(projected) + ", within your " + rupees(limit) + " limit.");
+  }
+  if (wantSum > 0) {
+    var half = Math.round(wantSum / 2);
+    out.push("Halving this week’s wants would keep " + rupees(half) + " with you - about " +
+      rupees(half * 4) + " across a month of similar weeks. That is arithmetic, not a prediction.");
+  }
+  if (entries.length >= 10) {
+    var byDay = [0, 0, 0, 0, 0, 0, 0];
+    entries.forEach(function (e) { byDay[new Date(e.ts).getDay()] += e.amount; });
+    var maxDay = byDay.indexOf(Math.max.apply(null, byDay));
+    out.push("Across everything logged, " + DAY_NAMES[maxDay] + "s cost you the most. Planning that day ahead is where savings hide.");
+  }
+  if (unlabelled > 0) {
+    out.push(unlabelled + " expense(s) this week have no Need/Want label yet - tap the label on any entry to set it.");
+  }
+  return out.slice(0, 5);
+}
+
+// ---------- Need/Want picker state ----------
+// What the two buttons in the add form currently say for the next
+// expense: "need", "want", or null (not labelled). Tapping the
+// chosen button again clears the choice.
+var pickedKind = null;
+function paintPicker() {
+  var n = document.getElementById("pickNeed");
+  var w = document.getElementById("pickWant");
+  n.classList.toggle("on", pickedKind === "need");
+  w.classList.toggle("on", pickedKind === "want");
+  n.setAttribute("aria-pressed", pickedKind === "need");
+  w.setAttribute("aria-pressed", pickedKind === "want");
+}
+function pick(kind) {
+  pickedKind = pickedKind === kind ? null : kind;
+  paintPicker();
+}
+
+// ---------- Drawing the screen ----------
+function render() {
+  var entries = loadEntries();
+  var week = thisWeekEntries();
+  var spent = sum(week);
+  var limit = loadLimit();
+
+  var remainingEl = document.getElementById("remaining");
+  if (limit === null) {
+    remainingEl.textContent = "No limit set";
+    remainingEl.classList.remove("over");
+  } else {
+    var left = limit - spent;
+    if (left < 0) {
+      remainingEl.textContent = rupees(-left) + " over";
+    } else {
+      remainingEl.textContent = rupees(left) + " left";
+    }
+    remainingEl.classList.toggle("over", left < 0);
+  }
+  document.getElementById("spentSoFar").textContent =
+    "Spent this week: " + rupees(spent);
+
+  // Needs vs wants split for this week.
+  var wantSum = sum(week.filter(function (e) { return e.kind === "want"; }));
+  var needSum = sum(week.filter(function (e) { return e.kind === "need"; }));
+  var unSum = spent - wantSum - needSum;
+  var splitEl = document.getElementById("nwSplit");
+  if (week.length === 0) {
+    splitEl.innerHTML = '<span class="un">Log expenses with a Need or Want label and your split appears here.</span>';
+  } else {
+    splitEl.innerHTML = "<span>Needs " + rupees(needSum) + "</span>" +
+      "<span>Wants " + rupees(wantSum) + "</span>" +
+      (unSum > 0 ? '<span class="un">Unlabelled ' + rupees(unSum) + "</span>" : "");
+  }
+
+  // The insight lines.
+  var insEl = document.getElementById("insights");
+  insEl.innerHTML = "";
+  buildInsights(entries, week, spent, limit).forEach(function (line) {
+    var p = document.createElement("p");
+    p.className = "insight";
+    p.textContent = line;
+    insEl.appendChild(p);
+  });
+
+  var listEl = document.getElementById("list");
+  listEl.innerHTML = "";
+  if (week.length === 0) {
+    listEl.innerHTML = '<p class="empty">Nothing logged yet this week.</p>';
+  }
+  // Newest first.
+  week.slice().reverse().forEach(function (e) {
+    var row = document.createElement("div");
+    row.className = "entry";
+    var what = document.createElement("div");
+    what.className = "what";
+    what.innerHTML = "<div>" + e.category + "</div>" +
+      (e.note ? '<div class="note"></div>' : "");
+    if (e.note) what.querySelector(".note").textContent = e.note;
+    // The tappable Need/Want label.
+    var chip = document.createElement("button");
+    chip.className = "chip" + (e.kind ? " " + e.kind : "");
+    chip.textContent = e.kind === "need" ? "Need" : e.kind === "want" ? "Want" : "Need / Want?";
+    chip.setAttribute("aria-label", "Label this expense as need or want");
+    chip.onclick = function () { cycleKind(e.id); };
+    what.appendChild(chip);
+    var amt = document.createElement("div");
+    amt.className = "amt";
+    amt.textContent = rupees(e.amount);
+    var del = document.createElement("button");
+    del.className = "del";
+    del.textContent = "\u00D7";   // multiplication sign as a close icon
+    del.setAttribute("aria-label", "Delete this entry");
+    del.onclick = function () { removeEntry(e.id); };
+    row.appendChild(what); row.appendChild(amt); row.appendChild(del);
+    listEl.appendChild(row);
+  });
+
+  // Category totals for the week.
+  var byCat = {};
+  week.forEach(function (e) {
+    byCat[e.category] = (byCat[e.category] || 0) + e.amount;
+  });
+  var parts = Object.keys(byCat).sort().map(function (c) {
+    return "<span>" + c + " " + rupees(byCat[c]) + "</span>";
+  });
+  document.getElementById("totals").innerHTML = parts.join("");
+}
+
+// ---------- Actions ----------
+function addEntry() {
+  var amount = parseFloat(document.getElementById("amount").value);
+  var err = document.getElementById("formError");
+  if (isNaN(amount) || amount <= 0) {
+    err.textContent = "Enter an amount above zero.";
+    return;
+  }
+  err.textContent = "";
+  var entries = loadEntries();
+  var entry = {
+    id: Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+    ts: Date.now(),
+    amount: amount,
+    category: document.getElementById("category").value,
+    note: document.getElementById("note").value.trim()
+  };
+  if (pickedKind) entry.kind = pickedKind;   // only stored if you picked one
+  entries.push(entry);
+  if (!saveEntries(entries)) return;   // keep what you typed if saving failed
+  document.getElementById("amount").value = "";
+  document.getElementById("note").value = "";
+  pickedKind = null;
+  paintPicker();
+  render();
+}
+
+// Tap the label on an entry to step through: unlabelled -> need ->
+// want -> unlabelled. You can always change your mind.
+function cycleKind(id) {
+  var entries = loadEntries().map(function (e) {
+    if (e.id !== id) return e;
+    if (!e.kind) e.kind = "need";
+    else if (e.kind === "need") e.kind = "want";
+    else delete e.kind;
+    return e;
+  });
+  if (!saveEntries(entries)) return;
+  render();
+}
+
+function removeEntry(id) {
+  if (!saveEntries(loadEntries().filter(function (e) { return e.id !== id; }))) return;
+  render();
+}
+
+function saveLimitFromInput() {
+  var v = parseFloat(document.getElementById("limit").value);
+  if (!isNaN(v) && v >= 0) saveLimit(v);
+  render();
+}
+
+function wipeAll() {
+  if (confirm("Delete every entry and your limit from this phone?")) {
+    try {
+      localStorage.removeItem(ENTRIES_KEY);
+      localStorage.removeItem(LIMIT_KEY);
+    } catch (e) {
+      showStorageProblem("Could not delete. Storage is unavailable in this browser.");
+      return;
+    }
+    document.getElementById("limit").value = "";
+    render();
+  }
+}
+
+// ---------- Start ----------
+if (!probeStorage()) {
+  showStorageProblem("Saving is not working in this browser. Open this file with Chrome, not the built-in viewer.");
+}
+document.getElementById("add").onclick = addEntry;
+document.getElementById("saveLimit").onclick = saveLimitFromInput;
+document.getElementById("wipe").onclick = wipeAll;
+document.getElementById("pickNeed").onclick = function () { pick("need"); };
+document.getElementById("pickWant").onclick = function () { pick("want"); };
+var savedLimit = loadLimit();
+if (savedLimit !== null) document.getElementById("limit").value = savedLimit;
+paintPicker();
+render();
+</script>
+</body>
+</html>
