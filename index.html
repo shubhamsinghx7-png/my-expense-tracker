@@ -1,11 +1,15 @@
 <!DOCTYPE html>
 <!--
-  My expense tracker - version 3
+  My expense tracker - version 4
   ------------------------------------------------------------------
   This whole app is ONE file. It runs in your phone's browser.
   Your expenses are saved ONLY on this phone (in this browser's
   local storage). Nothing is sent anywhere - there is no account,
   no server, and no internet needed after the app is installed.
+
+  New in version 4: the screens are now separate - Home, Add,
+  History and Insights, switched with the bottom bar like an app,
+  instead of one long page. Same features, same saved data.
 
   New in version 3: a visual restyle only - cleaner, more modern
   look with a few playful doodle touches. Same features, same
@@ -30,7 +34,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#f4efec">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
@@ -174,6 +178,44 @@
   .totals span { display: inline-block; margin-right: 12px; }
   .empty { color: var(--ink-2); font-size: 14px; }
   .err { color: var(--red); font-size: 14px; min-height: 20px; margin-top: 6px; }
+
+  /* --- Screens: one section at a time, like an app --- */
+  .view[hidden] { display: none; }
+  main { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+  /* Bottom navigation */
+  .tabbar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    background: #ffffff;
+    border-top: 1px solid var(--hairline);
+    display: flex;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -6px 20px rgba(34,29,26,0.06);
+    z-index: 10;
+  }
+  .tab {
+    flex: 1;
+    background: none;
+    border: none;
+    min-height: 56px;
+    padding: 6px 2px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink-2);
+  }
+  .tab svg { display: block; }
+  .tab .ic { padding: 3px 14px; border-radius: 999px; }
+  .tab[aria-current="page"] { color: var(--ink); }
+  .tab[aria-current="page"] .ic {
+    background: var(--lime);
+    transform: rotate(-2deg);
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
   /* --- the few deliberately-imperfect touches --- */
   .squiggle { display: block; margin: 2px 0 0 2px; }
   /* a strip of washi tape on the first card */
@@ -190,6 +232,7 @@
 <body>
 <main>
 
+  <div class="view" id="view-home">
   <h1>My expense tracker</h1>
   <svg class="squiggle" width="150" height="9" viewBox="0 0 150 9" aria-hidden="true"><path d="M2 5 Q 19 1 36 5 T 70 5 T 104 5 T 148 5" fill="none" stroke="#ff8fb1" stroke-width="3.5" stroke-linecap="round"/></svg>
   <p class="sub">Saved only on this phone. This app sends nothing anywhere.</p>
@@ -207,6 +250,9 @@
     <p class="sub" id="spentSoFar"></p>
   </section>
 
+  </div>
+
+  <div class="view" id="view-add" hidden>
   <!-- Add an expense: amount, category, an optional Need/Want
        label, and an optional note. -->
   <section>
@@ -235,6 +281,9 @@
     <button class="primary" id="add">Add expense</button>
   </section>
 
+  </div>
+
+  <div class="view" id="view-insights" hidden>
   <!-- Needs vs wants this week, plus simple on-phone calculations.
        These are arithmetic on your entries, not AI, not predictions,
        not guarantees. -->
@@ -245,6 +294,9 @@
     <p class="sub">These are simple calculations from your entries, done on this phone - not AI, not predictions, not guarantees.</p>
   </section>
 
+  </div>
+
+  <div class="view" id="view-history" hidden>
   <!-- This week's entries. Each one can be relabelled or deleted. -->
   <section>
     <h2>Logged this week</h2>
@@ -253,8 +305,25 @@
   </section>
 
   <button class="danger" id="wipe">Delete all my data on this phone</button>
+  </div>
 
-</main>
+  </main>
+
+  <!-- Bottom navigation: the four screens. -->
+  <nav class="tabbar" aria-label="Screens">
+    <button type="button" class="tab" data-view="home" aria-current="page">
+      <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11 L12 4 L20 11"/><path d="M6 10 v9 h12 v-9"/></svg></span>Home
+    </button>
+    <button type="button" class="tab" data-view="add">
+      <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 8.5 v7 M8.5 12 h7"/></svg></span>Add
+    </button>
+    <button type="button" class="tab" data-view="history">
+      <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4 h12 v16 l-2.5 -1.8 l-2 1.8 l-2 -1.8 l-2 1.8 l-2 -1.8 l-1.5 1.8 z"/><path d="M9 9 h6 M9 13 h6"/></svg></span>History
+    </button>
+    <button type="button" class="tab" data-view="insights">
+      <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 v8 l6.5 5.5"/><path d="M12 4 a9 9 0 1 0 9 9"/></svg></span>Insights
+    </button>
+  </nav>
 
 <script>
 // Register the offline service worker (only works over HTTPS or localhost).
@@ -523,6 +592,7 @@ function addEntry() {
   pickedKind = null;
   paintPicker();
   render();
+  showView("history");
 }
 
 // Tap the label on an entry to step through: unlabelled -> need ->
@@ -577,6 +647,33 @@ var savedLimit = loadLimit();
 if (savedLimit !== null) document.getElementById("limit").value = savedLimit;
 paintPicker();
 render();
+
+// ---------- Screens ----------
+// One section on screen at a time; the bottom bar switches them.
+// #home / #add / #history / #insights in the URL open that screen
+// directly - mostly so each screen can be checked on its own.
+function showView(name) {
+  var views = document.querySelectorAll(".view");
+  var found = false;
+  views.forEach(function (v) {
+    var on = v.id === "view-" + name;
+    v.hidden = !on;
+    if (on) found = true;
+  });
+  if (!found) name = "home", views.forEach(function (v) { v.hidden = v.id !== "view-home"; });
+  document.querySelectorAll(".tab").forEach(function (t) {
+    if (t.getAttribute("data-view") === name) t.setAttribute("aria-current", "page");
+    else t.removeAttribute("aria-current");
+  });
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll(".tab").forEach(function (t) {
+  t.onclick = function () { showView(t.getAttribute("data-view")); };
+});
+window.addEventListener("hashchange", function () {
+  showView(location.hash.replace("#", "") || "home");
+});
+showView(location.hash.replace("#", "") || "home");
 </script>
 </body>
 </html>
