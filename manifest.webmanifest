@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "My expense tracker",
-  "short_name": "Expenses",
-  "description": "A small private expense tracker. Entries stay on this device.",
+  "name": "stash",
+  "short_name": "stash",
+  "description": "stash - a small private expense tracker. Entries stay on this device.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
