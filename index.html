@@ -168,6 +168,8 @@
   .prop .bar .b { width: 0%; background: var(--accent); }
   .prop .ends { display: flex; justify-content: space-between; margin-top: 8px; font: 600 12px system-ui; color: var(--muted); }
   .prop .ends b { font-family: var(--mono); color: var(--ink); }
+  .prop .nwsub { margin-top: 7px; font: 500 11.5px system-ui; color: var(--muted); line-height: 1.5; }
+  .prop .nwsub b { font-family: var(--mono); color: var(--ink); }
   .hero2 { padding: 26px 22px 0; }
   .hero2 .n { font-family: var(--mono); font-size: 52px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; color: var(--accent); }
   .hero2 .c { font: 600 13px system-ui; margin-top: 8px; }
@@ -298,6 +300,7 @@
     <div class="label" style="margin-bottom:10px">Needs vs wants</div>
     <div class="bar"><div class="a" id="nwA"></div><div class="b" id="nwB"></div></div>
     <div class="ends"><span id="nwNeeds">needs <b>&#8377;0</b></span><span id="nwWants">wants <b>&#8377;0</b></span></div>
+    <div class="nwsub" id="nwUnlab" style="display:none"></div>
   </div>
   <div style="height:6px"></div>
   <hr class="hairline" style="margin:0 22px">
@@ -306,7 +309,7 @@
   <div class="statrow" id="rowPace" style="display:none"><span class="l">budget pace</span><span class="s">estimate, not a prediction</span><span class="v" id="paceAmt"></span></div>
   <hr class="hairline" style="margin:0 22px" id="hrPace" style="display:none">
   <div class="hero2" id="easySave" style="display:none">
-    <div class="label" style="margin-bottom:10px">The easy save</div>
+    <div class="label" style="margin-bottom:10px">If you halve wants</div>
     <div class="n" id="easySaveAmt"></div>
     <div class="c" id="easySaveCap"></div>
   </div>
@@ -493,7 +496,8 @@ function paintToast() {
 }
 
 // ---------- The weekly summary the AI is allowed to see ----------
-// Aggregates ONLY. No notes, no single expenses, no names.
+// Aggregates ONLY. No notes, no single expenses, no names. No
+// single-expense facts either: only week/category/needs-wants totals.
 // Facts are sorted most-useful-first by THIS code; the AI is only
 // allowed to phrase the first one. The schema lives in
 // backend/summary-schema.md in the same repo.
@@ -531,12 +535,6 @@ function buildWeeklySummary() {
   if (catKeys.length > 0) {
     add("biggest_category", { category: catKeys[0], amount: cats[catKeys[0]], share_pct: spent > 0 ? Math.round((cats[catKeys[0]] / spent) * 100) : 0 });
   }
-  var wantCats = {};
-  week.filter(function (e) { return e.kind === "want"; }).forEach(function (e) {
-    wantCats[e.category] = (wantCats[e.category] || 0) + e.amount;
-  });
-  var wKeys = Object.keys(wantCats).sort(function (a, b) { return wantCats[b] - wantCats[a]; });
-  if (wKeys.length > 0) add("biggest_want", { category: wKeys[0], amount: wantCats[wKeys[0]] });
   if (limit !== null && projection !== null && projection <= limit) {
     add("pace", { projection: projection, budget: limit, under_budget: true });
   }
@@ -565,7 +563,6 @@ function factLine(summary, id) {
   if (f.kind === "pace") return "based on: pace " + rupees(f.projection) + " by sunday vs budget " + rupees(f.budget) + " (estimate).";
   if (f.kind === "wants_majority") return "based on: wants are about " + f.share_pct + "% of your labelled spending (" + rupees(f.wants) + ").";
   if (f.kind === "biggest_category") return "based on: " + f.category + " is your biggest category - " + rupees(f.amount) + " (" + f.share_pct + "%).";
-  if (f.kind === "biggest_want") return "based on: biggest want is " + f.category + " at " + rupees(f.amount) + ".";
   return "";
 }
 
@@ -772,9 +769,16 @@ function render() {
   document.getElementById("nwA").style.width = nPct + "%";
   document.getElementById("nwB").style.width = wPct + "%";
   document.getElementById("nwNeeds").innerHTML = "needs <b>" + rupees(needSum) + "</b>";
-  document.getElementById("nwWants").innerHTML = labelled > 0
-    ? "wants <b>" + rupees(wantSum) + "</b> &middot; about " + wPct + "%"
-    : "wants <b>" + rupees(wantSum) + "</b>";
+  document.getElementById("nwWants").innerHTML = "wants <b>" + rupees(wantSum) + "</b>";
+  // spell out the denominator and the unlabelled remainder so the bar
+  // can never be read as "all spending"
+  var unlabSum = spent - labelled;
+  var nwSub = [];
+  if (labelled > 0) nwSub.push("wants are about <b>" + wPct + "%</b> of your labelled spending (needs + wants)");
+  if (unlabSum > 0) nwSub.push("not labelled yet: <b>" + rupees(unlabSum) + "</b> - counted in your week total, not in this bar");
+  var nwUnlab = document.getElementById("nwUnlab");
+  nwUnlab.style.display = nwSub.length > 0 ? "block" : "none";
+  nwUnlab.innerHTML = nwSub.join(". ") + (nwSub.length > 0 ? "." : "");
 
   // biggest want row
   var wants = week.filter(function (e) { return e.kind === "want"; });
@@ -800,7 +804,7 @@ function render() {
     document.getElementById("paceAmt").className = "v" + (projection > limit ? " over" : "");
   }
 
-  // the easy save: exactly half of wants, rounding admitted
+  // the halve-wants what-if: exactly half of wants, rounding admitted
   var showSave = wantSum > 0;
   document.getElementById("easySave").style.display = showSave ? "block" : "none";
   if (showSave) {
@@ -809,8 +813,8 @@ function render() {
     var rounded = halfExact !== halfRounded;
     document.getElementById("easySaveAmt").textContent = (rounded ? "~" : "") + rupees(halfRounded);
     document.getElementById("easySaveCap").innerHTML = rounded
-      ? "half of your wants (" + rupees(wantSum) + " = " + fmtExact(halfExact) + "). <span>shown rounded to the nearest rupee.</span>"
-      : "exactly half of your wants (" + rupees(wantSum) + "). <span>no rounding needed.</span>";
+      ? "halving your wants (" + rupees(wantSum) + " = " + fmtExact(halfExact) + ") would mean about " + rupees(halfRounded) + " not spent. <span>rounded to the nearest rupee - a what-if, not advice.</span>"
+      : "halving your wants (" + rupees(wantSum) + ") would mean " + rupees(halfRounded) + " not spent. <span>exact figure - a what-if, not advice.</span>";
   }
 
   document.getElementById("insightsEmpty").style.display = week.length === 0 ? "block" : "none";
