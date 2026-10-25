@@ -1,586 +1,365 @@
 <!DOCTYPE html>
 <!--
-  stash - version 5
+  stash - version 6
   ------------------------------------------------------------------
   This whole app is ONE file. It runs in your phone's browser.
   Your expenses are saved ONLY on this phone (in this browser's
-  local storage). Nothing is sent anywhere - there is no account,
-  no server, and no internet needed after the app is installed.
+  local storage). There is no account.
 
-  New in version 5: a name and a personality - "stash" and its
-  little raccoon - one consistent colour palette across all
-  screens, and a tighter, more app-like layout. Stash's spoken lines are fixed templates filled with
-  your numbers: arithmetic, not AI. Same features, same saved
-  data, same storage keys.
+  New in version 6: a calm "ledger" look (paper, ink, one vermilion
+  accent), and one new thing on the insights screen: STASH'S AI TIP.
 
-  Version 4: the screens became separate - Home, Add, History and
-  Insights, switched with the bottom bar like an app, instead of
-  one long page.
+  HOW THE AI TIP WORKS (the honest version):
+  - Your phone computes weekly TOTALS only: how much you spent, the
+    split between needs and wants, your pace. It also sorts those
+    facts, most useful first.
+  - ONLY those totals go to a small free server (a Cloudflare
+    Worker under your own account), which asks a free AI model to
+    phrase ONE small suggestion about the top fact.
+  - Your notes, single expenses and name NEVER leave this phone.
+  - The AI never writes numbers - every number you see is computed
+    here, on your phone. If the AI is tired (daily cap) or you are
+    offline, the app says so and everything else keeps working.
 
-  New in version 3: a visual restyle only - cleaner, more modern
-  look with a few playful doodle touches. Same features, same
-  saved data, same storage keys. Nothing about your entries changed.
+  Version 5: a name and a personality - "stash" and its raccoon.
+  Version 4: separate screens switched with the bottom bar.
+  Version 3: visual restyle. Version 2: Need/Want labels.
 
-  New in version 2: every expense can carry a Need/Want label that
-  YOU set (tap the label on any entry to change it), and a
-  "Needs and wants" section that shows simple on-phone calculations
-  about your spending. Those calculations are not AI and not
-  predictions - just arithmetic on what you logged.
-
-  How to read this file: the styles are at the top, the screen
-  layout is in the <body>, and the logic is in the <script> at the
-  bottom. Each part is commented so you can change it yourself.
-
-  Build steps to try next, with your AI assistant:
-    2. Edit an entry after saving it.
-    3. Add a monthly total next to the weekly one.
-    4. Export the entries as a CSV file you can keep.
-    5. Let yourself add your own categories.
+  How to read this file: styles at the top, screens in the <body>,
+  logic in the <script> at the bottom. Each part is commented.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#f6f2ec">
+<meta name="theme-color" content="#faf8f4">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <title>stash</title>
 <style>
-  /* One consistent palette: warm off-white ground, charcoal ink,
-     deep green for actions and known numbers, lime ONLY for the
-     picked/selected state, red only for the delete-all action.
-     The "imperfect" feel lives in the dots, the small squiggle,
-     the sticker tilt and the raccoon - not in extra colours. */
+  /* The calm-ledger palette: warm paper, ink, one vermilion accent,
+     hairline rules, tabular monospace for every number. */
   :root {
-    --ground: #f6f2ec;
-    --ink: #221d1a;
-    --ink-2: #6d655e;
-    --hairline: #ece5dc;
-    --teal: #2f6f5e;
-    --lime: #b8f04a;
-    --red: #d3252f;
+    --paper: #faf8f4;
+    --ink: #1c1b18;
+    --muted: #8a857c;
+    --accent: #e05d38;
+    --hair: #e6e1d8;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
   body {
-    margin: 0;
-    background: var(--ground);
-    background-image: radial-gradient(#e9e0d3 1px, transparent 1px);
-    background-size: 24px 24px;
-    color: var(--ink);
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    font-size: 16px;
-    line-height: 1.45;
+    background: var(--paper); color: var(--ink);
+    display: flex; flex-direction: column; min-height: 100%;
   }
-  main {
-    max-width: 480px;
-    margin: 0 auto;
-    padding: 14px 16px 28px;
-  }
-  h1 { font-size: 25px; margin: 0; letter-spacing: -0.02em; }
-  h2 { font-size: 17px; margin: 0 0 10px; letter-spacing: -0.01em; }
-  .sub { color: var(--ink-2); font-size: 13.5px; margin: 4px 0 0; }
-  /* Modern cards: soft shadow, generous radius. The wonky
-     hand-drawn borders from the mockup stay out of the way -
-     "imperfect" lives in the doodles, not the layout. */
-  section {
-    background: #ffffff;
-    border: 1px solid var(--hairline);
-    border-radius: 18px;
-    padding: 14px;
-    margin-top: 10px;
-    box-shadow: 0 1px 2px rgba(34,29,26,0.05), 0 10px 28px rgba(34,29,26,0.06);
-    position: relative;
-  }
-  label, .grouplabel { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 8px 0 5px; }
-  input, select {
-    width: 100%;
-    font-size: 16px;              /* stops iOS/Android zoom-on-focus */
-    padding: 12px 14px;
-    border: 1.5px solid var(--hairline);
-    border-radius: 12px;
-    background: #fdfcfa;
-    color: var(--ink);
-  }
-  input:focus, select:focus { outline: 2px solid var(--teal); outline-offset: 1px; }
-  button {
-    min-height: 44px;             /* comfortable touch target */
-    font-size: 16px;
-    font-weight: 600;
-    border: none;
-    border-radius: 12px;
-    padding: 12px 16px;
-    cursor: pointer;
-  }
-  .primary { background: var(--teal); color: #fff; width: 100%; margin-top: 10px; }
-  .primary:active { transform: translateY(1px); }
-  .link { background: none; color: var(--ink-2); text-decoration: underline; padding: 8px; }
-  .danger { background: none; color: var(--red); font-size: 14px; margin-top: 12px; }
-  /* Need/Want picker: a modern segmented control. The picked
-     one gets the playful touch - lime sticker with a tiny tilt. */
-  .kindrow { display: flex; gap: 10px; margin-top: 4px; }
-  .kindbtn {
-    flex: 1;
-    background: #fdfcfa;
-    color: var(--ink-2);
-    border: 1.5px dashed var(--hairline);
-    font-size: 15px;
-  }
-  .kindbtn.on {
-    background: var(--lime);
-    border: 1.5px solid var(--ink);
-    color: var(--ink);
-    transform: rotate(-1.2deg);
-    box-shadow: 2.5px 2.5px 0 var(--ink);
-  }
-  /* The little label under each saved entry. Tap it to change it. */
-  .chip {
-    min-height: 32px;
-    margin-top: 4px;
-    padding: 3px 12px;
-    font-size: 13px;
-    font-weight: 600;
-    border: 1.5px dashed var(--hairline);
-    border-radius: 999px;
-    background: none;
-    color: var(--ink-2);
-  }
-  .chip.need { border-style: solid; border-color: var(--teal); color: var(--teal); background: #e7f5e9; }
-  .chip.want { border-style: solid; border-color: #d8d2c8; color: var(--ink); background: #fff; }
-  .nw { display: flex; gap: 14px; flex-wrap: wrap; font-weight: 600; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
-  .nw .un { color: var(--ink-2); font-weight: 400; }
-  .insight { font-size: 15px; margin: 10px 0 0; }
-  .remaining {
-    margin: 6px 0 0;
-    font-size: 34px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    font-variant-numeric: tabular-nums;
-    color: var(--teal);
-    display: inline-block;
-    background: linear-gradient(transparent 62%, rgba(47,111,94,0.16) 62%);
-    padding: 0 4px;
-  }
-  .over { color: var(--red); background: linear-gradient(transparent 62%, #ffd0d4 62%); }
-  .entry {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 0;
-    border-top: 1px dashed var(--hairline);
-  }
-  .entry:first-of-type { border-top: none; }
-  .entry .what { flex: 1; }
-  .entry .note { color: var(--ink-2); font-size: 14px; }
-  .entry .amt { font-weight: 700; font-variant-numeric: tabular-nums; }
-  .del {
-    min-height: 36px;
-    min-width: 44px;
-    background: none;
-    color: var(--ink-2);
-    font-size: 18px;
-  }
-  .totals { color: var(--ink-2); font-size: 14px; margin-top: 10px; font-variant-numeric: tabular-nums; }
-  .totals span { display: inline-block; margin-right: 12px; }
-  .empty { color: var(--ink-2); font-size: 14px; }
-  .err { color: var(--red); font-size: 14px; min-height: 20px; margin-top: 6px; }
+  .mono { font-family: var(--mono); font-feature-settings: "tnum"; }
+  .word { font-size: 30px; font-weight: 900; letter-spacing: -0.03em; }
+  .word i { color: var(--accent); font-style: normal; }
+  .tag { font: 600 12px system-ui; color: var(--muted); margin-top: 1px; }
+  .label { font: 700 10.5px system-ui; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+  .hairline { border: none; border-top: 1px solid var(--hair); }
 
-  /* --- Screens: one section at a time, like an app --- */
-  .view[hidden] { display: none; }
-  main { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
-  /* Bottom navigation */
-  .tabbar {
-    position: fixed;
-    left: 0; right: 0; bottom: 0;
-    background: #ffffff;
-    border-top: 1px solid var(--hairline);
-    display: flex;
-    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
-    box-shadow: 0 -6px 20px rgba(34,29,26,0.06);
-    z-index: 10;
-  }
-  .tab {
-    flex: 1;
-    background: none;
-    border: none;
-    min-height: 56px;
-    padding: 6px 2px 4px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--ink-2);
-  }
-  .tab svg { display: block; }
-  .tab .ic { padding: 3px 14px; border-radius: 999px; }
-  .tab[aria-current="page"] { color: var(--ink); }
-  .tab[aria-current="page"] .ic {
-    background: var(--lime);
-    transform: rotate(-2deg);
-    box-shadow: 2px 2px 0 var(--ink);
-  }
+  /* One screen at a time; the bottom bar switches them. */
+  .view { display: none; flex-direction: column; flex: 1; padding-bottom: 12px; }
+  .view.on { display: flex; }
 
-  /* --- the few deliberately-imperfect touches --- */
-  .squiggle { display: block; margin: 2px 0 0 2px; }
-  /* stash: the brand row, the raccoon, and its spoken lines.
-     Stash's lines are fixed templates filled with your numbers -
-     arithmetic on your entries, never AI and never advice. */
-  .brandrow { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
-  .brandrow .coon { width: 58px; flex: none; position: relative; }
-  .brandrow h1 { margin: 0; font-size: 30px; }
-  .tagline { color: var(--ink-2); font-size: 14px; margin-top: -2px; }
-  .privline { display: flex; align-items: center; justify-content: center; gap: 6px;
-    color: var(--ink-2); font-size: 13px; margin: 10px 0 2px; }
-  .coon-empty { width: 64px; display: block; margin: 6px auto 2px; }
-  .coon svg { width: 100%; height: auto; display: block; }
-  /* This week card */
-  .wk-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .wk-head h2 { margin: 0; font-size: 20px; }
-  .badge { background: #e7f3ea; color: var(--teal); font-size: 12.5px; font-weight: 700;
-    border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
-  .spendrow { display: flex; align-items: stretch; gap: 18px; margin-top: 12px; }
-  .spendrow .col { flex: 1; }
-  .spendrow .vline { width: 1px; background: var(--hairline); }
-  .big2 { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-  .big2.green { color: var(--teal); }
-  .big2.over { color: var(--red); }
-  .cap { color: var(--ink-2); font-size: 13px; margin-top: 1px; }
-  .pbar { height: 12px; border-radius: 999px; background: #eee7dc; margin-top: 12px; overflow: hidden; }
-  .pbar > div { height: 100%; background: var(--teal); border-radius: 999px; }
-  .prow { display: flex; justify-content: space-between; color: var(--ink-2); font-size: 13px; margin-top: 6px;
-    font-variant-numeric: tabular-nums; }
-  .status { display: flex; align-items: center; gap: 8px; background: #e9f5dd; color: #245c3f;
-    border-radius: 12px; padding: 10px 12px; font-size: 14px; font-weight: 600; margin-top: 12px; }
-  .status.warn { background: #fdeaea; color: var(--red); }
-  .status:empty { display: none; }
-  .wk-hr { border: none; border-top: 1px solid var(--hairline); margin: 14px 0 2px; }
-  .budgetrow { display: flex; gap: 10px; margin-top: 2px; }
-  .budgetrow input { flex: 1; min-width: 0; }
-  .budgetrow .primary { width: auto; margin-top: 0; white-space: nowrap; }
-  /* Quick glance tiles */
-  .qg-head { display: flex; align-items: baseline; justify-content: space-between; margin: 18px 2px 0; }
-  .qg-head h2 { margin: 0; font-size: 18px; }
-  .tiles { display: flex; gap: 10px; margin-top: 10px; }
-  .tile { flex: 1; background: #fff; border: 1px solid var(--hairline); border-radius: 14px;
-    padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0;
-    box-shadow: 0 1px 2px rgba(34,29,26,0.05); }
-  .tic { width: 34px; height: 34px; border-radius: 999px; display: flex; align-items: center; justify-content: center; }
-  .tic.pink { background: #ffe3ec; color: #b23a63; }
-  .tic.lime { background: #e6f8c5; color: #4c7a1f; }
-  .tic.yellow { background: #fdf0c2; color: #8a6d1a; }
-  .tl { color: var(--ink-2); font-size: 12px; line-height: 1.25; }
-  .tv { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 1px; }
-  /* Add expense screen */
-  .addhead { display: flex; align-items: center; gap: 10px; margin: 2px 0 0; }
-  .addhead .coon { width: 40px; flex: none; }
-  .addhead h2 { margin: 0; font-size: 23px; letter-spacing: -0.02em; }
-  .addhead .sub { margin-top: 1px; }
-  .amtwrap { position: relative; margin-top: 6px; }
-  .amtwrap .rsym { position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
-    font-size: 24px; font-weight: 800; color: var(--ink); }
-  .amtwrap input { font-size: 26px; font-weight: 800; padding: 10px 52px 10px 48px;
-    border-radius: 14px; background: #f4fbf4; }
-  .amtwrap .clearbtn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-    width: 32px; height: 32px; min-height: 32px; border-radius: 999px; background: #e8e2d8;
-    color: var(--ink-2); font-size: 16px; padding: 0; display: none; }
-  .catgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 2px; }
-  .catcard { background: #fdfcfa; border: 1.5px solid var(--hairline); border-radius: 14px;
-    min-height: 66px; padding: 8px 6px 6px; display: flex; flex-direction: column;
-    align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--ink);
-    position: relative; }
-  .catcard svg { width: 23px; height: 23px; }
-  .catcard.on { background: #eefbe0; border-color: var(--teal); }
-  .check { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border-radius: 999px;
-    background: var(--teal); color: #fff; display: none; align-items: center; justify-content: center;
-    font-size: 12px; font-weight: 800; }
-  .catcard.on .check, .kwcard.on .check { display: flex; }
-  .kwpick { display: flex; gap: 8px; margin-top: 2px; }
-  .kwcard { flex: 1; background: #fdfcfa; border: 1.5px solid var(--hairline); border-radius: 14px;
-    min-height: 56px; padding: 8px 10px; display: flex; align-items: center; gap: 10px;
-    font-size: 15px; font-weight: 700; color: var(--ink); position: relative; text-align: left; }
-  .kwcard small { display: block; font-size: 12px; font-weight: 400; color: var(--ink-2); }
-  .kwcard.on { background: #eefbe0; border-color: var(--teal); }
-  .kwcard .kwic { flex: none; }
-  .notewrap { position: relative; margin-top: 2px; }
-  .notewrap .nic { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--ink-2); }
-  .notewrap input { padding-left: 42px; }
-  .savego { margin-top: 10px; }
-  .later { text-align: center; color: var(--ink-2); font-size: 13px; margin-top: 8px; }
-  /* Insights screen */
-  .nwtiles { display: flex; gap: 10px; margin-top: 12px; }
-  .nwtile { flex: 1; border-radius: 14px; padding: 12px; display: flex; align-items: center; gap: 10px; }
-  .nwtile.needs { background: #eef7e9; }
-  .nwtile.wants { background: #fdeef0; }
-  .nwtile .cic { width: 40px; height: 40px; }
-  .nwtile .cic svg { width: 21px; height: 21px; }
-  .nwtile .nl { font-size: 13px; color: var(--ink-2); }
-  .nwtile .nv { font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums; }
-  .nwtile .np { font-size: 12.5px; color: var(--ink-2); }
-  .propbar { display: flex; height: 26px; border-radius: 999px; overflow: hidden; margin-top: 10px; }
-  .propbar .pn { background: #3d9b63; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 700; min-width: 0; }
-  .propbar .pw { background: #e2606c; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 700; min-width: 0; }
-  .nwcaption { font-size: 14px; font-weight: 600; margin: 10px 0 0; }
-  .irow { display: flex; align-items: center; gap: 12px; border-radius: 14px; padding: 12px; margin-top: 10px; }
-  .irow .cic { width: 40px; height: 40px; }
-  .irow .cic svg { width: 21px; height: 21px; }
-  .irow.pink { background: #fdeef0; }
-  .irow.green { background: #eef7e9; }
-  .irow.yellow { background: #fdf5dd; }
-  .irow.gray { background: #f2efe8; }
-  .irow .il { font-size: 11px; font-weight: 800; letter-spacing: 0.07em; }
-  .irow.pink .il { color: #b23a48; }
-  .irow.green .il { color: #2f7a44; }
-  .irow.yellow .il { color: #9a7414; }
-  .irow.gray .il { color: var(--ink-2); }
-  .irow .it { font-size: 15px; font-weight: 700; margin-top: 2px; }
-  .irow .is { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
-  .method { display: flex; gap: 8px; align-items: flex-start; color: var(--ink-2); font-size: 12.5px; margin-top: 14px; }
-  .method svg { flex: none; margin-top: 1px; }
-  /* Stash tip card */
-  .tipcard { display: flex; gap: 12px; align-items: center; }
-  .tipcard .coon { width: 62px; flex: none; }
-  .tiplab { color: var(--teal); font-size: 11px; font-weight: 800; letter-spacing: 0.08em; }
-  .tipcard p { margin: 3px 0 0; font-size: 14px; font-weight: 600; }
-  .toast {
-    background: #eef9e6;
-    border: 1px solid #d9ecc8;
-    border-radius: 14px;
-    padding: 10px 14px;
-    margin: 10px 0 2px;
-    font-style: italic;
-    display: flex; align-items: center; gap: 10px;
-  }
-  .toast .coon { width: 34px; flex: none; }
-  .toast .tick { margin-left: auto; width: 22px; height: 22px; flex: none; border-radius: 999px;
-    border: 1.5px solid var(--teal); color: var(--teal); display: flex; align-items: center;
-    justify-content: center; font-size: 13px; font-weight: 800; font-style: normal; }
-  /* History screen */
-  .histhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 2px; }
-  .histhead .coon { width: 52px; flex: none; }
-  .sumhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-  .sumhead .rhs { text-align: right; }
-  .sumhead .rhs .lab { color: var(--ink-2); font-size: 12.5px; }
-  .sumhead .rhs .val { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
-  .cattiles { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-  .ctile { display: flex; align-items: center; gap: 8px; background: #fbf9f4;
-    border: 1px solid var(--hairline); border-radius: 12px; padding: 7px 12px 7px 8px; }
-  .ctile .cl { font-size: 12.5px; color: var(--ink-2); }
-  .ctile .cv { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .cic { width: 32px; height: 32px; border-radius: 999px; display: flex; align-items: center; justify-content: center; flex: none; }
-  .cic svg { width: 17px; height: 17px; }
-  .entry { position: relative; }
-  .entry .menuwrap { position: relative; }
-  .kebab { min-height: 36px; min-width: 36px; background: none; color: var(--ink-2); font-size: 18px; padding: 0 6px; letter-spacing: 1px; }
-  .menu { position: absolute; right: 0; top: 36px; background: #fff; border: 1px solid var(--hairline);
-    border-radius: 10px; box-shadow: 0 6px 18px rgba(34,29,26,0.12); z-index: 5; display: none; }
+  /* header shared */
+  .hd { padding: 26px 22px 0; display: flex; align-items: baseline; gap: 10px; }
+  .hd .right { margin-left: auto; font: 600 11px system-ui; color: var(--muted); }
+  .hd .coon { width: 34px; align-self: center; }
+
+  /* bottom nav - text only, with a small dot under the current one */
+  .nav { margin-top: auto; display: flex; border-top: 1px solid var(--hair); padding: 14px 8px 20px; background: var(--paper); }
+  .nav button { flex: 1; background: none; border: none; text-align: center; font: 700 12px system-ui; color: var(--muted); position: relative; padding: 2px 0 0; cursor: pointer; }
+  .nav button.sel { color: var(--ink); }
+  .nav button.sel::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 4px; height: 4px;
+    border-radius: 50%; background: var(--accent); transform: translateX(-50%); }
+
+  /* HOME */
+  .bignum { padding: 30px 22px 0; }
+  .bignum .n { font-family: var(--mono); font-size: 60px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; }
+  .bignum .c { font: 600 13px system-ui; color: var(--muted); margin-top: 8px; }
+  .prog { margin: 22px 22px 0; }
+  .prog .track { height: 4px; background: var(--hair); border-radius: 99px; overflow: hidden; }
+  .prog .fill { height: 100%; width: 0%; background: var(--accent); border-radius: 99px; }
+  .prog .ends { display: flex; justify-content: space-between; margin-top: 8px; font: 600 12px system-ui; color: var(--muted); }
+  .prog .ends b { color: var(--ink); font-family: var(--mono); font-weight: 700; }
+  .prog .ends b.over { color: #c24343; }
+  .statrow { display: flex; align-items: baseline; padding: 15px 22px; }
+  .statrow .l { font: 600 13.5px system-ui; color: var(--ink); }
+  .statrow .s { font: 500 11px system-ui; color: var(--muted); margin-left: 6px; }
+  .statrow .v { margin-left: auto; font-family: var(--mono); font-size: 17px; font-weight: 700; }
+  .statrow .v i { font-style: normal; color: var(--muted); font-size: 12px; }
+  .statrow .v.over { color: #c24343; }
+  .statrow .change { font: 700 12px system-ui; color: var(--accent); background: none; border: none; cursor: pointer; padding: 0 0 0 6px; }
+  .statrow input.limitin { margin-left: auto; width: 110px; font-family: var(--mono); font-size: 16px; font-weight: 700;
+    border: none; border-bottom: 2px solid var(--ink); background: transparent; color: var(--ink); text-align: right; outline: none; }
+  .note { margin: 20px 22px 0; padding-left: 12px; border-left: 3px solid var(--accent); }
+  .note .t1 { font: 800 11px system-ui; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+  .note .t2 { font: 600 13.5px system-ui; margin-top: 3px; }
+  .emptynote { margin: 20px 22px 0; font: 500 12.5px system-ui; color: var(--muted); }
+  .coon-empty { width: 90px; display: block; margin: 26px auto 10px; }
+
+  /* ADD */
+  .amtwrap { padding: 34px 22px 0; text-align: left; }
+  .amtwrap .cur { font: 700 12px system-ui; color: var(--muted); letter-spacing: .1em; }
+  .amtwrap .row { display: flex; align-items: baseline; border-bottom: 2px solid var(--ink); padding-bottom: 8px; margin-top: 6px; }
+  .amtwrap .sym { font-family: var(--mono); font-size: 30px; font-weight: 700; color: var(--muted); margin-right: 8px; }
+  .amtwrap input.val { font-family: var(--mono); font-size: 54px; font-weight: 700; letter-spacing: -0.03em;
+    border: none; background: transparent; color: var(--ink); outline: none; width: 100%; min-width: 0; }
+  .amtwrap input.val::placeholder { color: #d8d2c8; }
+  .amtwrap .clr { margin-left: auto; font: 700 12px system-ui; color: var(--accent); background: none; border: none; cursor: pointer; display: none; }
+  .sect { padding: 24px 22px 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .chip { font: 700 13px system-ui; border: 1px solid var(--hair); background: #fff; border-radius: 999px;
+    padding: 9px 16px; color: var(--ink); cursor: pointer; }
+  .chip.sel { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .seg { display: flex; border: 1px solid var(--hair); border-radius: 999px; overflow: hidden; margin-top: 10px; background: #fff; }
+  .seg button { flex: 1; background: none; border: none; text-align: center; padding: 12px; font: 700 13.5px system-ui; color: var(--muted); cursor: pointer; }
+  .seg button b { display: block; font-size: 14px; color: var(--ink); font-weight: 800; }
+  .seg button span { font-size: 10.5px; font-weight: 600; }
+  .seg button.sel { background: var(--ink); }
+  .seg button.sel b, .seg button.sel span { color: #fff; }
+  .hint { font: 500 11.5px system-ui; color: var(--muted); margin-top: 8px; }
+  .noteline { margin: 24px 22px 0; border-bottom: 1px solid var(--hair); padding-bottom: 10px; }
+  .noteline input { width: 100%; border: none; background: transparent; outline: none; font: 500 14px system-ui; color: var(--ink); }
+  .noteline input::placeholder { color: var(--muted); }
+  .savewrap { padding: 26px 22px 0; }
+  .savebtn { width: 100%; background: var(--ink); color: #fff; border: none; border-radius: 999px;
+    font: 800 16px system-ui; padding: 17px; letter-spacing: .01em; cursor: pointer; }
+  .formerr { padding: 10px 22px 0; font: 600 12.5px system-ui; color: #c24343; }
+  .foot { text-align: center; font: 500 11.5px system-ui; color: var(--muted); padding: 14px 24px 8px; }
+
+  /* HISTORY */
+  .htot { padding: 26px 22px 0; }
+  .htot .n { font-family: var(--mono); font-size: 46px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+  .htot .c { font: 600 12.5px system-ui; color: var(--muted); margin-top: 6px; }
+  .catsum { padding: 16px 22px 0; font-family: var(--mono); font-size: 12px; color: var(--muted); font-weight: 500; }
+  .catsum b { color: var(--ink); font-weight: 700; }
+  .toastline { margin: 16px 22px 0; padding-left: 12px; border-left: 3px solid var(--accent);
+    font: 600 italic 13px system-ui; color: var(--ink); display: none; }
+  .rows { padding: 6px 0 0; }
+  .r { display: flex; align-items: baseline; padding: 13px 22px; border-top: 1px solid var(--hair); position: relative; }
+  .r:first-child { border-top: none; }
+  .r .n1 { font: 700 13.5px system-ui; }
+  .r .n2 { font: 500 12px system-ui; color: var(--muted); margin-top: 1px; }
+  .r .pill { display: inline-block; font: 700 9.5px system-ui; letter-spacing: .06em; text-transform: uppercase;
+    border: 1px solid var(--hair); border-radius: 999px; padding: 2px 8px; margin-top: 5px; color: var(--muted);
+    background: none; cursor: pointer; }
+  .r .pill.need { border-color: var(--ink); color: var(--ink); }
+  .r .pill.want { border-color: var(--accent); color: var(--accent); }
+  .r .amt { margin-left: auto; font-family: var(--mono); font-weight: 700; font-size: 15px; }
+  .r .dots { color: var(--muted); margin-left: 10px; font-weight: 800; background: none; border: none; cursor: pointer; font-size: 15px; padding: 0 2px; }
+  .menu { position: absolute; right: 40px; top: 34px; background: #fff; border: 1px solid var(--hair); border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(28,27,24,.08); display: none; z-index: 5; }
   .menu.open { display: block; }
-  .menu button { background: none; color: var(--red); font-size: 14px; font-weight: 600;
-    min-height: 40px; padding: 8px 14px; white-space: nowrap; border-radius: 10px; }
-  .wipeall { display: flex; align-items: center; gap: 10px; width: 100%; background: #fdeeee;
-    color: var(--red); border-radius: 14px; margin-top: 12px; font-size: 14.5px; font-weight: 600;
-    padding: 14px 16px; }
-  .wipeall .go { margin-left: auto; font-size: 18px; font-weight: 400; }
+  .menu button { display: block; border: none; background: none; font: 600 13px system-ui; color: #c24343; padding: 10px 16px; cursor: pointer; }
+  .delall { padding: 18px 22px; font: 700 13px system-ui; color: #c24343; border-top: 1px solid var(--hair); margin-top: 10px;
+    background: none; border-left: none; border-right: none; border-bottom: none; text-align: left; cursor: pointer; }
+  .emptylist { padding: 18px 22px; font: 500 12.5px system-ui; color: var(--muted); text-align: center; }
+
+  /* INSIGHTS */
+  .prop { margin: 24px 22px 0; }
+  .prop .bar { display: flex; height: 10px; border-radius: 99px; overflow: hidden; background: var(--hair); }
+  .prop .bar .a { width: 0%; background: var(--ink); }
+  .prop .bar .b { width: 0%; background: var(--accent); }
+  .prop .ends { display: flex; justify-content: space-between; margin-top: 8px; font: 600 12px system-ui; color: var(--muted); }
+  .prop .ends b { font-family: var(--mono); color: var(--ink); }
+  .hero2 { padding: 26px 22px 0; }
+  .hero2 .n { font-family: var(--mono); font-size: 52px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; color: var(--accent); }
+  .hero2 .c { font: 600 13px system-ui; margin-top: 8px; }
+  .hero2 .c span { color: var(--muted); }
+  /* The AI tip card: clearly labelled, honest about what it is. */
+  .aitip { margin: 24px 22px 0; padding: 14px 0 0; border-top: 1px solid var(--hair); }
+  .aitip .t1 { font: 800 11px system-ui; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+  .aitip .tip { font: 600 14px system-ui; margin-top: 6px; line-height: 1.45; }
+  .aitip .fact { font: 600 12px system-ui; color: var(--ink); margin-top: 8px; }
+  .aitip .fact b { font-family: var(--mono); }
+  .aitip .how { font: 500 11px system-ui; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+  .method { margin: 20px 22px 0; padding-top: 14px; border-top: 1px solid var(--hair);
+    font: 500 11.5px system-ui; color: var(--muted); line-height: 1.55; }
+
+  /* storage warning banner, shown only when saving is impossible */
+  .storagewarn { display: none; margin: 14px 22px 0; padding: 10px 12px; border: 1px solid #c24343;
+    border-radius: 10px; font: 600 12.5px system-ui; color: #c24343; }
 </style>
 </head>
 <body>
-<main>
 
-  <div class="view" id="view-home">
-  <div class="brandrow">
-    <span class="coon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 170"> <ellipse cx="100" cy="150" rx="58" ry="8" fill="#e8ded5"/> <path d="M138 138 q34 -6 30 -40 q-2 -18 -20 -22 q16 10 8 30 q-8 18 -30 22 z" fill="#8f9aa6" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M148 122 l14 4 M152 106 l12 2" stroke="#26221f" stroke-width="5" stroke-linecap="round"/> <rect x="62" y="96" width="76" height="48" rx="22" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M60 60 L48 34 L78 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M140 60 L152 34 L122 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <circle cx="100" cy="74" r="36" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M64 66 q12 -10 24 -4 q-6 12 -16 12 q-8 0 -8 -8 Z" fill="#3a3f46"/> <path d="M136 66 q-12 -10 -24 -4 q6 12 16 12 q8 0 8 -8 Z" fill="#3a3f46"/> <path d="M64 66 Q100 50 136 66 Q100 58 64 66 Z" fill="#3a3f46"/> <circle cx="82" cy="70" r="4.5" fill="#ffffff"/> <circle cx="118" cy="70" r="4.5" fill="#ffffff"/> <circle cx="82" cy="70" r="2.2" fill="#26221f"/> <circle cx="118" cy="70" r="2.2" fill="#26221f"/> <ellipse cx="100" cy="86" rx="7" ry="5" fill="#3a3f46"/> <path d="M94 96 q6 5 12 0" fill="none" stroke="#26221f" stroke-width="4" stroke-linecap="round"/> <circle cx="100" cy="122" r="15" fill="#f2c14e" stroke="#26221f" stroke-width="5"/> <text x="100" y="128" font-family="DejaVu Sans" font-size="16" font-weight="bold" fill="#26221f" text-anchor="middle">&#8377;</text> </svg></span>
-    <div>
-      <h1>stash</h1>
-      <div class="tagline">your money, your rules
-        <svg width="150" height="8" viewBox="0 0 150 8" aria-hidden="true" style="display:block; margin-top:2px;"><path d="M2 4 Q 19 1 36 4 T 70 4 T 104 4 T 148 4" fill="none" stroke="#b8f04a" stroke-width="3" stroke-linecap="round"/></svg>
-      </div>
-    </div>
+<!-- ======================= HOME ======================= -->
+<section class="view" id="view-home">
+  <div class="hd">
+    <span class="coon" data-coon></span>
+    <div><div class="word">stash<i>.</i></div><div class="tag">your money, your rules</div></div>
+    <span class="right">on this phone</span>
   </div>
-  <p class="privline"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2f6f5e" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11 V8 a4 4 0 0 1 8 0 v3"/></svg>Private on this phone</p>
-  <p class="err" id="storageWarn" style="display:none"></p>
-
-  <!-- Weekly budget: you choose the number. The app shows what is
-       spent, what is left and the pace after this week's logged
-       expenses. Week starts Monday. -->
-  <section>
-    <div class="wk-head"><h2>This week</h2><span class="badge" id="pctBadge"></span></div>
-    <p class="sub" id="weekDates" style="margin-top:2px;"></p>
-    <div class="spendrow">
-      <div class="col"><div class="big2" id="spentNum">&#8377;0</div><div class="cap">spent</div></div>
-      <div class="vline"></div>
-      <div class="col"><div class="big2 green" id="leftNum">&#8377;0</div><div class="cap">left</div></div>
-    </div>
-    <div class="pbar" id="pbarWrap"><div id="pfill" style="width:0%"></div></div>
-    <div class="prow"><span id="pctText"></span><span id="totalText"></span></div>
-    <div class="status" id="statusBanner"></div>
-    <hr class="wk-hr">
-    <label for="limit">Weekly budget (&#8377;)</label>
-    <div class="budgetrow">
-      <input id="limit" type="number" inputmode="numeric" min="0" placeholder="e.g. 1500">
-      <button class="primary" id="saveLimit">Update budget</button>
-    </div>
-  </section>
-
-  <div class="qg-head"><h2>Quick glance</h2><span class="sub">This week</span></div>
-  <div class="tiles">
-    <div class="tile"><span class="tic pink" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10 h18"/><circle cx="16.5" cy="14.5" r="1.2" fill="currentColor"/></svg></span><div><div class="tl">Spent</div><div class="tv" id="tSpent">&#8377;0</div></div></div>
-    <div class="tile"><span class="tic lime" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="9" cy="7" rx="6" ry="3"/><path d="M3 7 v5 c0 1.7 2.7 3 6 3 s6 -1.3 6 -3 V7"/><path d="M3 12 v5 c0 1.7 2.7 3 6 3 s6 -1.3 6 -3 v-5"/></svg></span><div><div class="tl">Left</div><div class="tv" id="tLeft">&#8377;0</div></div></div>
-    <div class="tile"><span class="tic yellow" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20 V12"/><path d="M10 20 V6"/><path d="M16 20 v-6"/><path d="M22 20 H2"/></svg></span><div><div class="tl">Daily avg (so far)</div><div class="tv" id="tAvg">&#8377;0</div></div></div>
+  <div class="storagewarn" id="storageWarn"></div>
+  <div class="bignum">
+    <div class="n" id="spentNum">&#8377;0</div>
+    <div class="c">spent this week &middot; <span id="weekDates"></span></div>
   </div>
-
-  <section class="tipcard">
-    <span class="coon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 170"> <ellipse cx="100" cy="150" rx="58" ry="8" fill="#e8ded5"/> <path d="M138 138 q34 -6 30 -40 q-2 -18 -20 -22 q16 10 8 30 q-8 18 -30 22 z" fill="#8f9aa6" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M148 122 l14 4 M152 106 l12 2" stroke="#26221f" stroke-width="5" stroke-linecap="round"/> <rect x="62" y="96" width="76" height="48" rx="22" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M60 60 L48 34 L78 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M140 60 L152 34 L122 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <circle cx="100" cy="74" r="36" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M64 66 q12 -10 24 -4 q-6 12 -16 12 q-8 0 -8 -8 Z" fill="#3a3f46"/> <path d="M136 66 q-12 -10 -24 -4 q6 12 16 12 q8 0 8 -8 Z" fill="#3a3f46"/> <path d="M64 66 Q100 50 136 66 Q100 58 64 66 Z" fill="#3a3f46"/> <circle cx="82" cy="70" r="4.5" fill="#ffffff"/> <circle cx="118" cy="70" r="4.5" fill="#ffffff"/> <circle cx="82" cy="70" r="2.2" fill="#26221f"/> <circle cx="118" cy="70" r="2.2" fill="#26221f"/> <ellipse cx="100" cy="86" rx="7" ry="5" fill="#3a3f46"/> <path d="M94 96 q6 5 12 0" fill="none" stroke="#26221f" stroke-width="4" stroke-linecap="round"/> <circle cx="100" cy="122" r="15" fill="#f2c14e" stroke="#26221f" stroke-width="5"/> <text x="100" y="128" font-family="DejaVu Sans" font-size="16" font-weight="bold" fill="#26221f" text-anchor="middle">&#8377;</text> </svg></span>
-    <div>
-      <div class="tiplab">STASH TIP</div>
-      <p>Pause before the next impulse buy. Your future self says thanks.</p>
-    </div>
-  </section>
-
+  <div class="prog" id="progWrap" style="display:none">
+    <div class="track"><div class="fill" id="pfill"></div></div>
+    <div class="ends"><span id="progLeft"></span><span id="progRight"></span></div>
   </div>
-
-  <div class="view" id="view-add" hidden>
-  <div class="addhead">
-    <span class="coon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 170"> <ellipse cx="100" cy="150" rx="58" ry="8" fill="#e8ded5"/> <path d="M138 138 q34 -6 30 -40 q-2 -18 -20 -22 q16 10 8 30 q-8 18 -30 22 z" fill="#8f9aa6" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M148 122 l14 4 M152 106 l12 2" stroke="#26221f" stroke-width="5" stroke-linecap="round"/> <rect x="62" y="96" width="76" height="48" rx="22" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M60 60 L48 34 L78 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M140 60 L152 34 L122 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <circle cx="100" cy="74" r="36" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M64 66 q12 -10 24 -4 q-6 12 -16 12 q-8 0 -8 -8 Z" fill="#3a3f46"/> <path d="M136 66 q-12 -10 -24 -4 q6 12 16 12 q8 0 8 -8 Z" fill="#3a3f46"/> <path d="M64 66 Q100 50 136 66 Q100 58 64 66 Z" fill="#3a3f46"/> <circle cx="82" cy="70" r="4.5" fill="#ffffff"/> <circle cx="118" cy="70" r="4.5" fill="#ffffff"/> <circle cx="82" cy="70" r="2.2" fill="#26221f"/> <circle cx="118" cy="70" r="2.2" fill="#26221f"/> <ellipse cx="100" cy="86" rx="7" ry="5" fill="#3a3f46"/> <path d="M94 96 q6 5 12 0" fill="none" stroke="#26221f" stroke-width="4" stroke-linecap="round"/> <circle cx="100" cy="122" r="15" fill="#f2c14e" stroke="#26221f" stroke-width="5"/> <text x="100" y="128" font-family="DejaVu Sans" font-size="16" font-weight="bold" fill="#26221f" text-anchor="middle">&#8377;</text> </svg></span>
-    <div>
-      <h2>Add expense</h2>
-      <p class="sub">Quick entry, more mindful spending.</p>
-    </div>
+  <div style="height:18px"></div>
+  <hr class="hairline" style="margin:0 22px">
+  <div class="statrow"><span class="l">spent</span><span class="v" id="tSpent">&#8377;0</span></div>
+  <hr class="hairline" style="margin:0 22px">
+  <div class="statrow"><span class="l">left</span><span class="v" id="tLeft">-</span></div>
+  <hr class="hairline" style="margin:0 22px">
+  <div class="statrow"><span class="l">daily avg</span><span class="s" id="avgDays"></span><span class="v" id="tAvg">&#8377;0 <i>rounded</i></span></div>
+  <hr class="hairline" style="margin:0 22px">
+  <div class="statrow" id="limitRow">
+    <span class="l">weekly budget</span>
+    <span class="v" id="tLimit">-</span>
+    <button class="change" id="limitChange">set</button>
   </div>
-  <!-- Add an expense: amount, category, an optional Need/Want
-       label, and an optional note. -->
-  <section>
-    <label for="amount">Amount (&#8377;)</label>
-    <div class="amtwrap">
-      <span class="rsym" aria-hidden="true">&#8377;</span>
-      <input id="amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" aria-label="Amount in rupees">
-      <button type="button" class="clearbtn" id="clearAmount" aria-label="Clear amount">&times;</button>
-    </div>
-
-    <span class="grouplabel">Category</span>
-    <div class="catgrid" role="group" aria-label="Category">
-      <button type="button" class="catcard" data-cat="Food" aria-pressed="false"><span class="check" aria-hidden="true">&#10003;</span><svg viewBox="0 0 24 24" fill="none" stroke="#2f6f5e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 h16 a8 8 0 0 1 -16 0 z"/><path d="M9 12 q1 -4 4 -5 q3 -1 4 2" /><path d="M14 3 q2 1 1 4"/></svg>Food</button>
-      <button type="button" class="catcard" data-cat="Travel" aria-pressed="false"><span class="check" aria-hidden="true">&#10003;</span><svg viewBox="0 0 24 24" fill="none" stroke="#4a4f55" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="13" rx="2.5"/><path d="M5 11 h14"/><circle cx="8.5" cy="18.5" r="1.4"/><circle cx="15.5" cy="18.5" r="1.4"/></svg>Travel</button>
-      <button type="button" class="catcard" data-cat="Shopping" aria-pressed="false"><span class="check" aria-hidden="true">&#10003;</span><svg viewBox="0 0 24 24" fill="none" stroke="#b23a63" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8 h12 l-1 12 H7 z"/><path d="M9 8 a3 3 0 0 1 6 0"/></svg>Shopping</button>
-      <button type="button" class="catcard" data-cat="Bills" aria-pressed="false"><span class="check" aria-hidden="true">&#10003;</span><svg viewBox="0 0 24 24" fill="none" stroke="#3d5a99" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M9 8 h6 M9 12 h6 M9 16 h4"/></svg>Bills</button>
-      <button type="button" class="catcard" data-cat="College" aria-pressed="false"><span class="check" aria-hidden="true">&#10003;</span><svg viewBox="0 0 24 24" fill="none" stroke="#6b4fa1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9 L12 4 l10 5 l-10 5 z"/><path d="M6 11.5 V16 c0 1.5 2.7 3 6 3 s6 -1.5 6 -3 v-4.5"/><path d="M22 9 v5"/></svg>College</button>
-      <button type="button" class="catcard" data-cat="Fun" aria-pressed="false"><span class="check" aria-hidden="true">&#10003;</span><svg viewBox="0 0 24 24" fill="none" stroke="#7a4fc9" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9 h10 a5 5 0 0 1 5 5 a3 3 0 0 1 -5 2 l-1.5 -1.5 h-7 L7 16 a3 3 0 0 1 -5 -2 a5 5 0 0 1 5 -5 z"/><path d="M8 12.5 v3 M6.5 14 h3"/><circle cx="16" cy="13" r="0.6" fill="#7a4fc9"/><circle cx="18" cy="15" r="0.6" fill="#7a4fc9"/></svg>Fun</button>
-      <button type="button" class="catcard" data-cat="Other" aria-pressed="false"><span class="check" aria-hidden="true">&#10003;</span><svg viewBox="0 0 24 24" fill="none" stroke="#4a4f55" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="12" r="1.3" fill="#4a4f55"/><circle cx="12" cy="12" r="1.3" fill="#4a4f55"/><circle cx="18" cy="12" r="1.3" fill="#4a4f55"/></svg>Other</button>
-    </div>
-
-    <span class="grouplabel">Need or want?</span>
-    <div class="kwpick" role="group" aria-label="Need or want">
-      <button type="button" class="kwcard" id="pickNeed" aria-pressed="false"><span class="check" aria-hidden="true">&#10003;</span><span class="kwic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2f6f5e" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11 L12 4 L20 11"/><path d="M6 10 v9 h12 v-9"/></svg></span><span>Need<small>Essential expense</small></span></button>
-      <button type="button" class="kwcard" id="pickWant" aria-pressed="false"><span class="check" aria-hidden="true">&#10003;</span><span class="kwic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c98a1f" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 l1.8 5.2 L19 10 l-5.2 1.8 L12 17 l-1.8 -5.2 L5 10 l5.2 -1.8 z"/><path d="M18.5 15.5 l0.8 2.2 2.2 0.8 -2.2 0.8 -0.8 2.2 -0.8 -2.2 -2.2 -0.8 2.2 -0.8 z"/></svg></span><span>Want<small>Nice to have</small></span></button>
-    </div>
-    <p class="sub">Not sure? Skip it - you can label or change any expense later.</p>
-
-    <label for="note">Note (optional)</label>
-    <div class="notewrap">
-      <span class="nic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M9 8 h6 M9 12 h6"/></svg></span>
-      <input id="note" type="text" maxlength="60" placeholder="What was it for?">
-    </div>
-    <p class="err" id="formError"></p>
-    <button class="primary savego" id="addBtn">Save expense &#8594;</button>
-    <p class="later">You can relabel or delete an expense later from History.</p>
-  </section>
-
+  <hr class="hairline" style="margin:0 22px">
+  <div class="note" id="stashNote" style="display:none">
+    <div class="t1">Stash note</div>
+    <div class="t2" id="stashNoteText"></div>
   </div>
-
-  <div class="view" id="view-insights" hidden>
-  <div class="histhead">
-    <div>
-      <h1 style="font-size:30px;">stash</h1>
-      <div class="tagline">your money, your rules
-        <svg width="120" height="8" viewBox="0 0 120 8" aria-hidden="true" style="display:block; margin-top:2px;"><path d="M2 4 Q 16 1 30 4 T 58 4 T 86 4 T 118 4" fill="none" stroke="#b8f04a" stroke-width="3" stroke-linecap="round"/></svg>
-      </div>
-    </div>
-    <span class="coon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 170"> <ellipse cx="100" cy="150" rx="58" ry="8" fill="#e8ded5"/> <path d="M138 138 q34 -6 30 -40 q-2 -18 -20 -22 q16 10 8 30 q-8 18 -30 22 z" fill="#8f9aa6" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M148 122 l14 4 M152 106 l12 2" stroke="#26221f" stroke-width="5" stroke-linecap="round"/> <rect x="62" y="96" width="76" height="48" rx="22" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M60 60 L48 34 L78 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M140 60 L152 34 L122 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <circle cx="100" cy="74" r="36" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M64 66 q12 -10 24 -4 q-6 12 -16 12 q-8 0 -8 -8 Z" fill="#3a3f46"/> <path d="M136 66 q-12 -10 -24 -4 q6 12 16 12 q8 0 8 -8 Z" fill="#3a3f46"/> <path d="M64 66 Q100 50 136 66 Q100 58 64 66 Z" fill="#3a3f46"/> <circle cx="82" cy="70" r="4.5" fill="#ffffff"/> <circle cx="118" cy="70" r="4.5" fill="#ffffff"/> <circle cx="82" cy="70" r="2.2" fill="#26221f"/> <circle cx="118" cy="70" r="2.2" fill="#26221f"/> <ellipse cx="100" cy="86" rx="7" ry="5" fill="#3a3f46"/> <path d="M94 96 q6 5 12 0" fill="none" stroke="#26221f" stroke-width="4" stroke-linecap="round"/> <circle cx="100" cy="122" r="15" fill="#f2c14e" stroke="#26221f" stroke-width="5"/> <text x="100" y="128" font-family="DejaVu Sans" font-size="16" font-weight="bold" fill="#26221f" text-anchor="middle">&#8377;</text> </svg></span>
+  <div class="emptynote" id="homeEmpty" style="display:none">
+    <span class="coon-empty" data-coon></span>
+    Nothing logged yet this week. Tap add below when you spend something.
   </div>
-
-  <!-- Needs vs wants this week, plus simple on-phone calculations.
-       These are arithmetic on your entries, not AI, not predictions,
-       not guarantees. -->
-  <section>
-    <h2 style="margin:0;">Your spending, decoded</h2>
-    <p class="sub" style="margin-top:2px;">This week</p>
-    <div id="nwSplit"></div>
-    <div id="insights"></div>
-    <div class="method"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11 v5"/><circle cx="12" cy="8" r="0.8" fill="currentColor"/></svg><span>Simple calculations from your entries, done on this phone - not AI. Percentages use only the expenses you labelled. The pace line is an estimate from this week so far, not a prediction or guarantee.</span></div>
-  </section>
-
+  <div class="nav">
+    <button class="tab sel" data-view="home">home</button>
+    <button class="tab" data-view="add">add</button>
+    <button class="tab" data-view="history">history</button>
+    <button class="tab" data-view="insights">insights</button>
   </div>
+</section>
 
-  <div class="view" id="view-history" hidden>
-  <div class="histhead">
-    <div>
-      <h1 style="font-size:30px;">stash</h1>
-      <div class="tagline">your money, your rules
-        <svg width="120" height="8" viewBox="0 0 120 8" aria-hidden="true" style="display:block; margin-top:2px;"><path d="M2 4 Q 16 1 30 4 T 58 4 T 86 4 T 118 4" fill="none" stroke="#b8f04a" stroke-width="3" stroke-linecap="round"/></svg>
-      </div>
-    </div>
-    <span class="coon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 170"> <ellipse cx="100" cy="150" rx="58" ry="8" fill="#e8ded5"/> <path d="M138 138 q34 -6 30 -40 q-2 -18 -20 -22 q16 10 8 30 q-8 18 -30 22 z" fill="#8f9aa6" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M148 122 l14 4 M152 106 l12 2" stroke="#26221f" stroke-width="5" stroke-linecap="round"/> <rect x="62" y="96" width="76" height="48" rx="22" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M60 60 L48 34 L78 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M140 60 L152 34 L122 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <circle cx="100" cy="74" r="36" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M64 66 q12 -10 24 -4 q-6 12 -16 12 q-8 0 -8 -8 Z" fill="#3a3f46"/> <path d="M136 66 q-12 -10 -24 -4 q6 12 16 12 q8 0 8 -8 Z" fill="#3a3f46"/> <path d="M64 66 Q100 50 136 66 Q100 58 64 66 Z" fill="#3a3f46"/> <circle cx="82" cy="70" r="4.5" fill="#ffffff"/> <circle cx="118" cy="70" r="4.5" fill="#ffffff"/> <circle cx="82" cy="70" r="2.2" fill="#26221f"/> <circle cx="118" cy="70" r="2.2" fill="#26221f"/> <ellipse cx="100" cy="86" rx="7" ry="5" fill="#3a3f46"/> <path d="M94 96 q6 5 12 0" fill="none" stroke="#26221f" stroke-width="4" stroke-linecap="round"/> <circle cx="100" cy="122" r="15" fill="#f2c14e" stroke="#26221f" stroke-width="5"/> <text x="100" y="128" font-family="DejaVu Sans" font-size="16" font-weight="bold" fill="#26221f" text-anchor="middle">&#8377;</text> </svg></span>
+<!-- ======================= ADD ======================= -->
+<section class="view" id="view-add">
+  <div class="hd">
+    <div><div class="word">add<i>.</i></div><div class="tag">quick entry, mindful spending</div></div>
   </div>
-  <div id="addedToast"></div>
-
-  <!-- This week's summary and entries. Each entry can be
-       relabelled (tap the pill) or deleted (the ... menu). -->
-  <section>
-    <div class="sumhead">
-      <div><h2 style="margin:0;">This week</h2><p class="sub" id="weekCount" style="margin-top:2px;"></p></div>
-      <div class="rhs"><div class="lab">Total spent</div><div class="val" id="weekTotal">&#8377;0</div></div>
+  <div class="amtwrap">
+    <div class="cur">AMOUNT</div>
+    <div class="row"><span class="sym">&#8377;</span><input class="val" id="amount" type="number" inputmode="decimal" min="0" step="any" placeholder="0"><button class="clr" id="clearAmount">clear</button></div>
+  </div>
+  <div class="sect"><div class="label">Category</div>
+    <div class="chips" id="catChips"></div>
+  </div>
+  <div class="sect"><div class="label">Need or want?</div>
+    <div class="seg">
+      <button id="pickNeed" type="button"><b>need</b><span>essential</span></button>
+      <button id="pickWant" type="button"><b>want</b><span>nice to have</span></button>
     </div>
-    <div class="cattiles" id="catTiles"></div>
-  </section>
+    <div class="hint">not sure? skip it - you can label it later from history.</div>
+  </div>
+  <div class="noteline"><input id="note" type="text" maxlength="80" placeholder="note (optional) - stays on this phone"></div>
+  <div class="formerr" id="formError"></div>
+  <div class="savewrap"><button class="savebtn" id="addBtn">save expense</button></div>
+  <div class="foot">relabel or delete later from history.</div>
+  <div class="nav">
+    <button class="tab" data-view="home">home</button>
+    <button class="tab sel" data-view="add">add</button>
+    <button class="tab" data-view="history">history</button>
+    <button class="tab" data-view="insights">insights</button>
+  </div>
+</section>
 
-  <section style="padding-top:6px;">
-    <div id="list"></div>
-  </section>
+<!-- ======================= HISTORY ======================= -->
+<section class="view" id="view-history">
+  <div class="hd">
+    <div><div class="word">history<i>.</i></div><div class="tag">every rupee, accounted for</div></div>
+    <span class="right">on this phone</span>
+  </div>
+  <div class="htot">
+    <div class="n" id="weekTotal">&#8377;0</div>
+    <div class="c"><span id="weekCount">0 expenses</span> &middot; <span id="histDates"></span></div>
+  </div>
+  <div class="catsum" id="catSum"></div>
+  <div class="toastline" id="addedToast"></div>
+  <div style="height:12px"></div>
+  <div class="rows" id="list"></div>
+  <button class="delall" id="wipe">delete all my data on this phone</button>
+  <div class="nav">
+    <button class="tab" data-view="home">home</button>
+    <button class="tab" data-view="add">add</button>
+    <button class="tab sel" data-view="history">history</button>
+    <button class="tab" data-view="insights">insights</button>
+  </div>
+</section>
 
-  <button class="wipeall" id="wipe"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7 h16"/><path d="M9 7 V5 a1 1 0 0 1 1 -1 h4 a1 1 0 0 1 1 1 v2"/><path d="M6 7 l1 13 a1.5 1.5 0 0 0 1.5 1.3 h7 A1.5 1.5 0 0 0 17 20 l1 -13"/></svg>Delete all my data on this phone<span class="go">&#8250;</span></button>
+<!-- ======================= INSIGHTS ======================= -->
+<section class="view" id="view-insights">
+  <div class="hd">
+    <div><div class="word">insights<i>.</i></div><div class="tag">your spending, decoded</div></div>
+  </div>
+  <div class="prop">
+    <div class="label" style="margin-bottom:10px">Needs vs wants</div>
+    <div class="bar"><div class="a" id="nwA"></div><div class="b" id="nwB"></div></div>
+    <div class="ends"><span id="nwNeeds">needs <b>&#8377;0</b></span><span id="nwWants">wants <b>&#8377;0</b></span></div>
+  </div>
+  <div style="height:6px"></div>
+  <hr class="hairline" style="margin:0 22px">
+  <div class="statrow" id="rowBiggestWant" style="display:none"><span class="l">biggest want</span><span class="s" id="bwCat"></span><span class="v" id="bwAmt"></span></div>
+  <hr class="hairline" style="margin:0 22px" id="hrBiggestWant" style="display:none">
+  <div class="statrow" id="rowPace" style="display:none"><span class="l">budget pace</span><span class="s">estimate, not a prediction</span><span class="v" id="paceAmt"></span></div>
+  <hr class="hairline" style="margin:0 22px" id="hrPace" style="display:none">
+  <div class="hero2" id="easySave" style="display:none">
+    <div class="label" style="margin-bottom:10px">The easy save</div>
+    <div class="n" id="easySaveAmt"></div>
+    <div class="c" id="easySaveCap"></div>
+  </div>
+  <div class="emptynote" id="insightsEmpty" style="display:none">
+    <span class="coon-empty" data-coon></span>
+    Log a few expenses and your needs-vs-wants split, pace and the AI tip appear here.
   </div>
 
-  </main>
+  <!-- The one new thing in v6. Honest by design:
+       - the FACT line under the tip is your phone's math,
+       - the tip text is AI words about that fact,
+       - only weekly totals ever leave the phone. -->
+  <div class="aitip" id="aiBox" style="display:none">
+    <div class="t1">Stash's AI tip</div>
+    <div class="tip" id="aiTip"></div>
+    <div class="fact" id="aiFact"></div>
+    <div class="how" id="aiHow">words by a free ai &middot; numbers by your phone &middot; only weekly totals leave this phone - never notes, names or single expenses</div>
+  </div>
 
-  <!-- Bottom navigation: the four screens. -->
-  <nav class="tabbar" aria-label="Screens">
-    <button type="button" class="tab" data-view="home" aria-current="page">
-      <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11 L12 4 L20 11"/><path d="M6 10 v9 h12 v-9"/></svg></span>Home
-    </button>
-    <button type="button" class="tab" data-view="add">
-      <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 8.5 v7 M8.5 12 h7"/></svg></span>Add
-    </button>
-    <button type="button" class="tab" data-view="history">
-      <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4 h12 v16 l-2.5 -1.8 l-2 1.8 l-2 -1.8 l-2 1.8 l-2 -1.8 l-1.5 1.8 z"/><path d="M9 9 h6 M9 13 h6"/></svg></span>History
-    </button>
-    <button type="button" class="tab" data-view="insights">
-      <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 v8 l6.5 5.5"/><path d="M12 4 a9 9 0 1 0 9 9"/></svg></span>Insights
-    </button>
-  </nav>
+  <div class="method" id="methodNote">
+    simple math from your entries, done on this phone. the pace line is spent &divide; days so far &times; 7,
+    shown rounded - an estimate, never a guarantee. the ai tip only ever sees weekly totals, never your
+    notes or single expenses, and it never writes the numbers.
+  </div>
+  <div class="nav">
+    <button class="tab" data-view="home">home</button>
+    <button class="tab" data-view="add">add</button>
+    <button class="tab" data-view="history">history</button>
+    <button class="tab sel" data-view="insights">insights</button>
+  </div>
+</section>
 
 <script>
-// Register the offline service worker (only works over HTTPS or localhost).
+// Offline support: the app shell opens without internet. (The AI
+// tip is the only feature that needs a connection; everything
+// else works fully offline.)
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(function () {
-    // Offline mode unavailable; the tracker still works online.
+    // no offline mode - everything except the icon still works
   });
 }
-</script>
-<script>
-// ---------- Where the data lives ----------
-// localStorage keeps two things, only inside this browser on
-// this phone: the entries list and the weekly limit. Clearing
-// the browser's site data erases them.
-// Each entry: { id, ts, amount, category, note, kind }
-// kind is "need", "want", or missing (entries saved before labels
-// existed, or ones you chose not to label). Nothing is assigned
-// for you - a label only ever comes from your tap.
+
+// ---------- Where your data lives ----------
+// localStorage keeps things only inside this browser on this
+// phone. These key names never change, so updates never lose
+// your saved entries.
 var ENTRIES_KEY = "tracker.entries.v1";
 var LIMIT_KEY = "tracker.limit.v1";
+// One extra key in v6: the last AI tip and the totals it was
+// based on, so the app does not ask the AI again until your
+// numbers change. Never holds notes or single expenses.
+var AITIP_KEY = "tracker.aitip.v1";
 
-// Check at startup that saving actually works in this browser.
-// If it does not, say so on screen instead of pretending entries
-// were saved.
 var storageOK = true;
 function probeStorage() {
   try {
@@ -591,23 +370,20 @@ function probeStorage() {
   } catch (e) { return false; }
 }
 function showStorageProblem(msg) {
-  storageOK = false;
   var el = document.getElementById("storageWarn");
   el.textContent = msg;
   el.style.display = "block";
 }
-
 function loadEntries() {
   try { return JSON.parse(localStorage.getItem(ENTRIES_KEY)) || []; }
   catch (e) { return []; }
 }
-// Returns true if the save really worked.
 function saveEntries(entries) {
   try {
     localStorage.setItem(ENTRIES_KEY, JSON.stringify(entries));
     return true;
   } catch (e) {
-    showStorageProblem("Could not save. Storage may be unavailable or full on this browser.");
+    showStorageProblem("Could not save. Storage is unavailable in this browser, so your entry was kept on screen only.");
     return false;
   }
 }
@@ -616,23 +392,27 @@ function loadLimit() {
   return isNaN(v) ? null : v;
 }
 function saveLimit(v) {
-  try {
-    localStorage.setItem(LIMIT_KEY, String(v));
-    return true;
-  } catch (e) {
-    showStorageProblem("Could not save. Storage may be unavailable or full on this browser.");
-    return false;
-  }
+  try { localStorage.setItem(LIMIT_KEY, String(v)); return true; }
+  catch (e) { showStorageProblem("Could not save your budget. Storage is unavailable in this browser."); return false; }
 }
 
-// ---------- Time helpers ----------
-// The week runs Monday 00:00 to Sunday 23:59.
+// ---------- Small helpers ----------
 var DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function startOfWeek(d) {
   var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   var day = (x.getDay() + 6) % 7;      // Monday = 0
   x.setDate(x.getDate() - day);
-  return x.getTime();
+  return x;
+}
+function isoDay(d) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function weekRange() {
+  var s = startOfWeek(new Date());
+  var e = new Date(s.getTime() + 6 * 86400000);
+  return { start: s, end: e,
+    label: MON[s.getMonth()] + " " + s.getDate() + " - " + MON[e.getMonth()] + " " + e.getDate() };
 }
 function thisWeekEntries() {
   var start = startOfWeek(new Date());
@@ -642,99 +422,47 @@ function sum(list) {
   return list.reduce(function (t, e) { return t + e.amount; }, 0);
 }
 function rupees(n) {
-  // Indian digit grouping: 1,500 not 1500
-  return "₹" + n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  return "\u20B9" + n.toLocaleString("en-IN");
 }
-
-// ---------- The savings insights ----------
-// Plain calculations from the logged entries. No AI model, no
-// network. Observations and arithmetic only - no advice to cut
-// essentials, no promises.
 function fmtExact(n) {
-  // Exact rupee figure: 2 decimals only when they exist (₹192.50).
   var hasFraction = Math.round(n * 100) !== Math.round(n) * 100;
-  return "\u20B9" + n.toLocaleString("en-IN", hasFraction
-    ? { minimumFractionDigits: 2, maximumFractionDigits: 2 }
-    : { maximumFractionDigits: 2 });
+  return hasFraction ? "\u20B9" + n.toFixed(2) : rupees(n);
 }
-// The savings insights as display rows. Plain calculations from
-// the logged entries. No AI model, no network. No advice to cut
-// essentials, no promises, no judgement about wants.
-function buildInsightRows(entries, week, spent, limit) {
-  var rows = [];
-  var wants = week.filter(function (e) { return e.kind === "want"; });
-  var unlabelled = week.filter(function (e) { return !e.kind; }).length;
-  var wantSum = sum(wants);
+function elapsedDays() { return ((new Date().getDay() + 6) % 7) + 1; }
 
-  if (wants.length > 0) {
-    var byCat = {};
-    wants.forEach(function (e) { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
-    var top = Object.keys(byCat).sort(function (a, b) { return byCat[b] - byCat[a]; })[0];
-    rows.push({ tone: "pink", label: "YOUR BIGGEST WANT",
-      title: top + " (" + rupees(byCat[top]) + ")",
-      sub: "Biggest want this week.", icon: catIcon(top) });
-  }
-  if (limit !== null && week.length > 0) {
-    var dayIdx = (new Date().getDay() + 6) % 7;   // Monday = 0
-    var projected = Math.round((spent / (dayIdx + 1)) * 7);
-    rows.push({ tone: projected > limit ? "pink" : "green", label: "BUDGET PACE",
-      title: projected > limit
-        ? "At this pace, this week lands around " + rupees(projected) + " - above your " + rupees(limit) + " limit."
-        : "At this pace, this week lands around " + rupees(projected) + ", within your " + rupees(limit) + " limit.",
-      sub: "Spent so far \u00F7 days so far \u00D7 7. An estimate, not a prediction.",
-      icon: '<span class="cic" style="background:' + (projected > limit ? "#ffe3ec" : "#e3f4e9") + '" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="' + (projected > limit ? "#b23a48" : "#2f6f5e") + '" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1" fill="' + (projected > limit ? "#b23a48" : "#2f6f5e") + '"/><path d="M18.5 3.5 l-3 3"/><path d="M20 6 h-4 V2"/></svg></span>' });
-  }
-  if (wantSum > 0) {
-    var halfExact = wantSum / 2;
-    var halfRounded = Math.round(halfExact);
-    var rounded = halfExact !== halfRounded;
-    rows.push({ tone: "yellow", label: "SAVINGS NUDGE",
-      title: "Cut wants in half \u2192 keep " + (rounded ? "~" : "") + rupees(halfRounded),
-      sub: rounded
-        ? "Half of " + rupees(wantSum) + " is " + fmtExact(halfExact) + " - shown rounded to the nearest rupee. Just arithmetic - your call."
-        : "Halving this week's wants keeps " + rupees(halfRounded) + " with you. Just arithmetic - your call.",
-      icon: '<span class="cic" style="background:#fdf0c2" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#9a7414" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18 h6"/><path d="M10 21 h4"/><path d="M12 3 a6 6 0 0 0 -4 10.5 c0.8 0.7 1 1.5 1 2.5 h6 c0 -1 0.2 -1.8 1 -2.5 A6 6 0 0 0 12 3 z"/></svg></span>' });
-  }
-  if (unlabelled > 0) {
-    rows.push({ tone: "gray", label: "UNLABELLED",
-      title: unlabelled + (unlabelled === 1 ? " expense has" : " expenses have") + " no Need/Want label yet",
-      sub: "Tap the pill on an entry to set it.",
-      icon: '<span class="cic" style="background:#eeeae2" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#4a4f55" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3 h8 l9 9 -8 8 -9 -9 z"/><circle cx="8" cy="8" r="1.4"/></svg></span>' });
-  }
-  if (entries.length >= 10) {
-    var byDay = [0, 0, 0, 0, 0, 0, 0];
-    entries.forEach(function (e) { byDay[new Date(e.ts).getDay()] += e.amount; });
-    var maxDay = byDay.indexOf(Math.max.apply(null, byDay));
-    rows.push({ tone: "gray", label: "PATTERN",
-      title: "Across everything logged, " + DAY_NAMES[maxDay] + "s cost you the most.",
-      sub: "Planning that day ahead is where savings hide.",
-      icon: '<span class="cic" style="background:#eeeae2" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#4a4f55" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3 v4 M16 3 v4 M4 10 h16"/></svg></span>' });
-  }
-  return rows;
-}
+// ---------- Stash's look ----------
+var COON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 170"> <ellipse cx="100" cy="150" rx="58" ry="8" fill="#e8ded5"/> <path d="M138 138 q34 -6 30 -40 q-2 -18 -20 -22 q16 10 8 30 q-8 18 -30 22 z" fill="#8f9aa6" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M148 122 l14 4 M152 106 l12 2" stroke="#26221f" stroke-width="5" stroke-linecap="round"/> <rect x="62" y="96" width="76" height="48" rx="22" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M60 60 L48 34 L78 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M140 60 L152 34 L122 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <circle cx="100" cy="74" r="36" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M64 66 q12 -10 24 -4 q-6 12 -16 12 q-8 0 -8 -8 Z" fill="#3a3f46"/> <path d="M136 66 q-12 -10 -24 -4 q6 12 16 12 q8 0 -8 -8 Z" fill="#3a3f46"/> <path d="M64 66 Q100 50 136 66 Q100 58 64 66 Z" fill="#3a3f46"/> <circle cx="82" cy="70" r="4.5" fill="#ffffff"/> <circle cx="118" cy="70" r="4.5" fill="#ffffff"/> <circle cx="82" cy="70" r="2.2" fill="#26221f"/> <circle cx="118" cy="70" r="2.2" fill="#26221f"/> <ellipse cx="100" cy="86" rx="7" ry="5" fill="#3a3f46"/> <path d="M94 96 q6 5 12 0" fill="none" stroke="#26221f" stroke-width="4" stroke-linecap="round"/> <circle cx="100" cy="122" r="15" fill="#f6f2ec" stroke="#26221f" stroke-width="5"/> <text x="100" y="128" font-family="DejaVu Sans" font-size="16" font-weight="bold" fill="#26221f" text-anchor="middle">&#8377;</text> </svg>';
+document.querySelectorAll("[data-coon]").forEach(function (e) {
+  e.innerHTML = COON;
+  var svg = e.querySelector("svg");
+  if (svg) { svg.style.width = "100%"; svg.style.height = "auto"; }
+});
 
-// ---------- Need/Want picker state ----------
-// What the two buttons in the add form currently say for the next
-// expense: "need", "want", or null (not labelled). Tapping the
-// chosen button again clears the choice.
-var pickedKind = null;
-// The category card picked for the next expense. Defaults to Food,
-// same as the old dropdown's first option.
-var pickedCategory = "Food";
-function paintPicker() {
-  var n = document.getElementById("pickNeed");
-  var w = document.getElementById("pickWant");
-  n.classList.toggle("on", pickedKind === "need");
-  w.classList.toggle("on", pickedKind === "want");
-  n.setAttribute("aria-pressed", pickedKind === "need");
-  w.setAttribute("aria-pressed", pickedKind === "want");
-}
+// Categories in picker order. The lowercase key is what the AI
+// summary is allowed to say; the label is what you see.
+var CATS = [
+  ["food", "food"], ["travel", "travel"], ["shopping", "shopping"],
+  ["bills", "bills"], ["college", "college"], ["fun", "fun"], ["other", "other"]
+];
+var CAT_LABEL = { food: "Food", travel: "Travel", shopping: "Shopping", bills: "Bills", college: "College", fun: "Fun", other: "Other" };
+
+// ---------- Add screen state ----------
+var pickedKind = null;             // "need" | "want" | null
+var pickedCategory = "food";
 function paintCats() {
-  document.querySelectorAll(".catcard").forEach(function (b) {
-    var on = b.getAttribute("data-cat") === pickedCategory;
-    b.classList.toggle("on", on);
-    b.setAttribute("aria-pressed", on);
+  var wrap = document.getElementById("catChips");
+  wrap.innerHTML = "";
+  CATS.forEach(function (c) {
+    var b = document.createElement("button");
+    b.className = "chip" + (pickedCategory === c[0] ? " sel" : "");
+    b.textContent = c[1];
+    b.onclick = function () { pickedCategory = c[0]; paintCats(); };
+    wrap.appendChild(b);
   });
+}
+function paintPicker() {
+  document.getElementById("pickNeed").className = pickedKind === "need" ? "sel" : "";
+  document.getElementById("pickWant").className = pickedKind === "want" ? "sel" : "";
 }
 function paintClear() {
   document.getElementById("clearAmount").style.display =
@@ -745,234 +473,347 @@ function pick(kind) {
   paintPicker();
 }
 
-// ---------- Stash's look and voice ----------
-// The raccoon appears in the header and empty states. Stash's
-// spoken lines are fixed templates below, filled with your
-// numbers - plain arithmetic, shown as-is. Not AI.
-var COON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 170"> <ellipse cx="100" cy="150" rx="58" ry="8" fill="#e8ded5"/> <path d="M138 138 q34 -6 30 -40 q-2 -18 -20 -22 q16 10 8 30 q-8 18 -30 22 z" fill="#8f9aa6" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M148 122 l14 4 M152 106 l12 2" stroke="#26221f" stroke-width="5" stroke-linecap="round"/> <rect x="62" y="96" width="76" height="48" rx="22" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M60 60 L48 34 L78 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <path d="M140 60 L152 34 L122 46 Z" fill="#aeb9c4" stroke="#26221f" stroke-width="5" stroke-linejoin="round"/> <circle cx="100" cy="74" r="36" fill="#aeb9c4" stroke="#26221f" stroke-width="5"/> <path d="M64 66 q12 -10 24 -4 q-6 12 -16 12 q-8 0 -8 -8 Z" fill="#3a3f46"/> <path d="M136 66 q-12 -10 -24 -4 q6 12 16 12 q8 0 8 -8 Z" fill="#3a3f46"/> <path d="M64 66 Q100 50 136 66 Q100 58 64 66 Z" fill="#3a3f46"/> <circle cx="82" cy="70" r="4.5" fill="#ffffff"/> <circle cx="118" cy="70" r="4.5" fill="#ffffff"/> <circle cx="82" cy="70" r="2.2" fill="#26221f"/> <circle cx="118" cy="70" r="2.2" fill="#26221f"/> <ellipse cx="100" cy="86" rx="7" ry="5" fill="#3a3f46"/> <path d="M94 96 q6 5 12 0" fill="none" stroke="#26221f" stroke-width="4" stroke-linecap="round"/> <circle cx="100" cy="122" r="15" fill="#f6f2ec" stroke="#26221f" stroke-width="5"/> <text x="100" y="128" font-family="DejaVu Sans" font-size="16" font-weight="bold" fill="#26221f" text-anchor="middle">&#8377;</text> </svg>';
-
-// Set after you add an expense; shown briefly on the History
-// screen, then it clears itself after a few seconds.
+// The "noted." toast on History: shows briefly, clears itself.
 var justAddedAmount = null;
 var toastTimer = null;
 function paintToast() {
   var el = document.getElementById("addedToast");
   if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
   if (justAddedAmount !== null) {
-    el.innerHTML = '<div class="toast"><span class="coon" aria-hidden="true">' + COON + '</span>' +
-      '<span>Noted. ' + rupees(justAddedAmount) + ' accounted for.</span>' +
-      '<span class="tick" aria-hidden="true">&#10003;</span></div>';
+    el.textContent = "noted. " + rupees(justAddedAmount) + " accounted for.";
+    el.style.display = "block";
     justAddedAmount = null;
     toastTimer = setTimeout(function () {
-      el.innerHTML = "";
+      el.style.display = "none";
       toastTimer = null;
-    }, 4500);   // the note fades away on its own
+    }, 4500);
   } else {
-    el.innerHTML = "";
+    el.style.display = "none";
   }
 }
 
-// ---------- Category icons ----------
-// One small icon and colour per category, reused in the category
-// picker and the history list.
-var CAT_STYLE = {
-  'Food': ['#ffe3ec', '#b23a63', '<svg viewBox="0 0 24 24" fill="none" stroke="#b23a63" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 h16 a8 8 0 0 1 -16 0 z"/><path d="M9 12 q1 -4 4 -5 q3 -1 4 2"/><path d="M14 3 q2 1 1 4"/></svg>'],
-  'Travel': ['#e1edfb', '#3d5a99', '<svg viewBox="0 0 24 24" fill="none" stroke="#3d5a99" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="13" rx="2.5"/><path d="M5 11 h14"/><circle cx="8.5" cy="18.5" r="1.4"/><circle cx="15.5" cy="18.5" r="1.4"/></svg>'],
-  'Shopping': ['#fde2f0', '#b23a8a', '<svg viewBox="0 0 24 24" fill="none" stroke="#b23a8a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8 h12 l-1 12 H7 z"/><path d="M9 8 a3 3 0 0 1 6 0"/></svg>'],
-  'Bills': ['#e3e7f5', '#3d5a99', '<svg viewBox="0 0 24 24" fill="none" stroke="#3d5a99" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M9 8 h6 M9 12 h6 M9 16 h4"/></svg>'],
-  'College': ['#e3f4e9', '#2f6f5e', '<svg viewBox="0 0 24 24" fill="none" stroke="#2f6f5e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9 L12 4 l10 5 l-10 5 z"/><path d="M6 11.5 V16 c0 1.5 2.7 3 6 3 s6 -1.5 6 -3 v-4.5"/><path d="M22 9 v5"/></svg>'],
-  'Fun': ['#ece3f8', '#7a4fc9', '<svg viewBox="0 0 24 24" fill="none" stroke="#7a4fc9" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9 h10 a5 5 0 0 1 5 5 a3 3 0 0 1 -5 2 l-1.5 -1.5 h-7 L7 16 a3 3 0 0 1 -5 -2 a5 5 0 0 1 5 -5 z"/><path d="M8 12.5 v3 M6.5 14 h3"/><circle cx="16" cy="13" r="0.6"/><circle cx="18" cy="15" r="0.6"/></svg>'],
-  'Other': ['#eeeae2', '#4a4f55', '<svg viewBox="0 0 24 24" fill="none" stroke="#4a4f55" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18" cy="12" r="1.3"/></svg>'],
-};
-function catIcon(cat) {
-  var s = CAT_STYLE[cat] || CAT_STYLE["Other"];
-  return '<span class="cic" style="background:' + s[0] + '" aria-hidden="true">' + s[2] + '</span>';
+// ---------- The weekly summary the AI is allowed to see ----------
+// Aggregates ONLY. No notes, no single expenses, no names.
+// Facts are sorted most-useful-first by THIS code; the AI is only
+// allowed to phrase the first one. The schema lives in
+// backend/summary-schema.md in the same repo.
+function buildWeeklySummary() {
+  var week = thisWeekEntries();
+  var wr = weekRange();
+  var spent = sum(week);
+  var limit = loadLimit();
+  var days = elapsedDays();
+  var projection = week.length > 0 ? Math.round((spent / days) * 7) : null;
+
+  var cats = {};
+  week.forEach(function (e) { cats[e.category] = (cats[e.category] || 0) + e.amount; });
+  var needs = sum(week.filter(function (e) { return e.kind === "need"; }));
+  var wants = sum(week.filter(function (e) { return e.kind === "want"; }));
+  var labelled = needs + wants;
+
+  // Rank the facts. Order matters: the AI phrases facts[0] only.
+  var facts = [];
+  function add(kind, extra) {
+    if (facts.length >= 8) return;
+    var f = { id: "P" + (facts.length + 1), kind: kind };
+    if (extra) Object.keys(extra).forEach(function (k) { f[k] = extra[k]; });
+    facts.push(f);
+  }
+  if (week.length > 0 && week.length < 3) add("low_data");
+  if (week.length > 0 && limit === null) add("no_budget");
+  if (limit !== null && projection !== null && projection > limit) {
+    add("pace", { projection: projection, budget: limit, under_budget: false });
+  }
+  if (labelled > 0 && wants / labelled > 0.5) {
+    add("wants_majority", { wants: wants, share_pct: Math.round((wants / labelled) * 100) });
+  }
+  var catKeys = Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a]; });
+  if (catKeys.length > 0) {
+    add("biggest_category", { category: catKeys[0], amount: cats[catKeys[0]], share_pct: spent > 0 ? Math.round((cats[catKeys[0]] / spent) * 100) : 0 });
+  }
+  var wantCats = {};
+  week.filter(function (e) { return e.kind === "want"; }).forEach(function (e) {
+    wantCats[e.category] = (wantCats[e.category] || 0) + e.amount;
+  });
+  var wKeys = Object.keys(wantCats).sort(function (a, b) { return wantCats[b] - wantCats[a]; });
+  if (wKeys.length > 0) add("biggest_want", { category: wKeys[0], amount: wantCats[wKeys[0]] });
+  if (limit !== null && projection !== null && projection <= limit) {
+    add("pace", { projection: projection, budget: limit, under_budget: true });
+  }
+
+  return {
+    v: 1,
+    week: { start: isoDay(wr.start), end: isoDay(wr.end), days_elapsed: days },
+    budget: limit,
+    spent_total: spent,
+    entry_count: week.length,
+    categories: cats,
+    needs: needs,
+    wants: wants,
+    pace_projection: projection,
+    facts: facts
+  };
 }
 
-// ---------- Drawing the screen ----------
+// A one-line, phone-computed version of a fact, shown under the AI
+// tip so the numbers always come from us, never from the model.
+function factLine(summary, id) {
+  var f = summary.facts.filter(function (x) { return x.id === id; })[0];
+  if (!f) return "";
+  if (f.kind === "low_data") return "based on: only " + summary.entry_count + (summary.entry_count === 1 ? " expense" : " expenses") + " so far this week.";
+  if (f.kind === "no_budget") return "based on: no weekly budget set yet.";
+  if (f.kind === "pace") return "based on: pace " + rupees(f.projection) + " by sunday vs budget " + rupees(f.budget) + " (estimate).";
+  if (f.kind === "wants_majority") return "based on: wants are about " + f.share_pct + "% of your labelled spending (" + rupees(f.wants) + ").";
+  if (f.kind === "biggest_category") return "based on: " + f.category + " is your biggest category - " + rupees(f.amount) + " (" + f.share_pct + "%).";
+  if (f.kind === "biggest_want") return "based on: biggest want is " + f.category + " at " + rupees(f.amount) + ".";
+  return "";
+}
+
+// ---------- The AI tip ----------
+// Free Cloudflare Worker under your own account. It rate-limits
+// itself (a soft daily cap) and only accepts the summary shape
+// above. Source: backend/worker.js in the same repo.
+var AI_URL = "https://stash-ai.shubhamsinghpage.workers.dev";
+var aiBusy = false;
+function aiHowDefault() {
+  return "words by a free ai &middot; numbers by your phone &middot; only weekly totals leave this phone - never notes, names or single expenses";
+}
+function paintAi(state, payload) {
+  var box = document.getElementById("aiBox");
+  var tip = document.getElementById("aiTip");
+  var fact = document.getElementById("aiFact");
+  var how = document.getElementById("aiHow");
+  var week = thisWeekEntries();
+  if (week.length === 0) { box.style.display = "none"; return; }
+  box.style.display = "block";
+  if (state === "loading") {
+    tip.textContent = "thinking over this week's totals...";
+    fact.textContent = "";
+    how.innerHTML = aiHowDefault();
+  } else if (state === "tip") {
+    tip.textContent = payload.tip;
+    fact.innerHTML = payload.fact;
+    how.innerHTML = aiHowDefault();
+  } else if (state === "quiet") {
+    tip.textContent = "the ai tip is resting today - a small daily cap keeps the free service free. your numbers above all still work.";
+    fact.textContent = "";
+    how.textContent = "everything except the tip is computed on this phone, as always.";
+  } else {   // offline or the service did not answer
+    tip.textContent = "no ai tip right now (offline or the free service is busy). the math above is all yours, computed here.";
+    fact.textContent = "";
+    how.textContent = "everything except the tip is computed on this phone, as always.";
+  }
+}
+function refreshAiTip() {
+  var week = thisWeekEntries();
+  if (week.length === 0) { paintAi("none"); return; }
+  var summary = buildWeeklySummary();
+  if (summary.facts.length === 0) { paintAi("none"); return; }
+  // Fingerprint of what the tip would be about. Same numbers =
+  // same tip, no new request.
+  var fp = [summary.week.start, summary.spent_total, summary.entry_count,
+            summary.budget, summary.needs, summary.wants, summary.pace_projection].join("|");
+  try {
+    var cached = JSON.parse(localStorage.getItem(AITIP_KEY));
+    if (cached && cached.fp === fp && cached.tip && cached.fact) {
+      paintAi("tip", cached);
+      return;
+    }
+  } catch (e) {}
+  if (!navigator.onLine) { paintAi("offline"); return; }
+  if (aiBusy) return;
+  aiBusy = true;
+  paintAi("loading");
+  var done = false;
+  var timer = setTimeout(function () {
+    if (!done) { done = true; aiBusy = false; paintAi("error"); }
+  }, 12000);   // the free model can take a few seconds; never hang
+  fetch(AI_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(summary)
+  }).then(function (res) {
+    if (res.status === 429) { done = true; clearTimeout(timer); aiBusy = false; paintAi("quiet"); return null; }
+    if (!res.ok) { done = true; clearTimeout(timer); aiBusy = false; paintAi("error"); return null; }
+    return res.json();
+  }).then(function (data) {
+    if (!data) return;
+    done = true; clearTimeout(timer); aiBusy = false;
+    if (!data || typeof data.suggestion !== "string") { paintAi("error"); return; }
+    var fact = factLine(summary, data.pattern_id);
+    if (!fact) { paintAi("error"); return; }
+    var tip = { fp: fp, tip: data.suggestion, fact: fact };
+    try { localStorage.setItem(AITIP_KEY, JSON.stringify(tip)); } catch (e) {}
+    paintAi("tip", tip);
+  }).catch(function () {
+    if (!done) { done = true; clearTimeout(timer); aiBusy = false; paintAi("error"); }
+  });
+}
+
+// ---------- Drawing ----------
 function render() {
   var entries = loadEntries();
   var week = thisWeekEntries();
   var spent = sum(week);
   var limit = loadLimit();
+  var wr = weekRange();
 
-  // --- Home: This week card ---
-  // Dates of the current Monday-Sunday week, e.g. "Oct 19 - Oct 25".
-  var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  var wStart = new Date(startOfWeek(new Date()));
-  var wEnd = new Date(wStart.getTime() + 6 * 86400000);
-  document.getElementById("weekDates").textContent =
-    MON[wStart.getMonth()] + " " + wStart.getDate() + " - " +
-    MON[wEnd.getMonth()] + " " + wEnd.getDate();
-
+  document.getElementById("weekDates").textContent = wr.label;
+  document.getElementById("histDates").textContent = wr.label;
   document.getElementById("spentNum").textContent = rupees(spent);
-  var leftEl = document.getElementById("leftNum");
-  var badge = document.getElementById("pctBadge");
-  var pbarWrap = document.getElementById("pbarWrap");
-  var pctText = document.getElementById("pctText");
-  var totalText = document.getElementById("totalText");
-  var banner = document.getElementById("statusBanner");
-  var tSpent = document.getElementById("tSpent");
-  var tLeft = document.getElementById("tLeft");
-  var tAvg = document.getElementById("tAvg");
-  tSpent.textContent = rupees(spent);
+  document.getElementById("tSpent").textContent = rupees(spent);
 
+  // Budget progress + left/over
+  var progWrap = document.getElementById("progWrap");
+  var tLeft = document.getElementById("tLeft");
   if (limit === null) {
-    // No budget yet: only "spent" is known. Say so instead of
-    // inventing a percentage.
-    leftEl.textContent = "-";
-    leftEl.classList.remove("over");
-    badge.style.display = "none";
-    pbarWrap.style.display = "none";
-    pctText.textContent = "";
-    totalText.textContent = "";
-    banner.className = "status";
-    banner.textContent = spent === 0
-      ? "Set a weekly budget below and stash tracks what is left."
-      : "Set a weekly budget below to see what is left.";
+    progWrap.style.display = "none";
     tLeft.textContent = "-";
+    tLeft.className = "v";
+    document.getElementById("tLimit").textContent = "-";
+    document.getElementById("limitChange").textContent = "set";
   } else {
     var left = limit - spent;
-    leftEl.textContent = left < 0 ? rupees(-left) + " over" : rupees(left);
-    leftEl.classList.toggle("over", left < 0);
-    leftEl.classList.toggle("green", left >= 0);
     var pct = limit > 0 ? Math.round((spent / limit) * 100) : (spent > 0 ? 100 : 0);
-    badge.style.display = "";
-    badge.textContent = pct + "% used";
-    pbarWrap.style.display = "";
+    progWrap.style.display = "";
     document.getElementById("pfill").style.width = Math.min(pct, 100) + "%";
-    pctText.textContent = pct + "% used";
-    totalText.textContent = rupees(limit) + " total";
-    banner.className = "status" + (left < 0 ? " warn" : "");
-    banner.textContent = left < 0
-      ? rupees(-left) + " over. Let's look at what changed."
-      : spent === 0
-        ? "Nothing spent yet this week."
-        : "\uD83C\uDF89 You're under budget. Keep it up.";
-    tLeft.textContent = left < 0 ? "-" + rupees(-left) : rupees(left);
+    document.getElementById("progLeft").innerHTML = "<b>" + rupees(spent) + "</b> of " + rupees(limit);
+    document.getElementById("progRight").innerHTML = left < 0
+      ? "<b class='over'>" + rupees(-left) + " over</b>"
+      : "<b>" + rupees(left) + "</b> left";
+    tLeft.textContent = left < 0 ? rupees(-left) + " over" : rupees(left);
+    tLeft.className = "v" + (left < 0 ? " over" : "");
+    document.getElementById("tLimit").textContent = rupees(limit);
+    document.getElementById("limitChange").textContent = "change";
   }
-  // Daily average so far this week: what you spent divided by the
-  // number of days elapsed since Monday (today counts).
-  var elapsedDays = ((new Date().getDay() + 6) % 7) + 1;
-  tAvg.textContent = rupees(Math.round(spent / elapsedDays));
+  document.getElementById("tAvg").innerHTML = rupees(Math.round(spent / elapsedDays())) + " <i>rounded</i>";
+  document.getElementById("avgDays").textContent = "\u00F7 " + elapsedDays() + (elapsedDays() === 1 ? " day" : " days");
 
-  // Needs vs wants split for this week: pastel tiles, a
-  // proportion bar and a caption. Percentages use labelled
-  // spending only; unlabelled expenses get their own row below.
-  var wantSum = sum(week.filter(function (e) { return e.kind === "want"; }));
-  var needSum = sum(week.filter(function (e) { return e.kind === "need"; }));
-  var splitEl = document.getElementById("nwSplit");
-  var labelled = wantSum + needSum;
-  if (week.length === 0) {
-    splitEl.innerHTML = '<span class="coon-empty" aria-hidden="true">' + COON + '</span>' +
-      '<span class="un" style="display:block; text-align:center">Log expenses with a Need or Want label and your split appears here.</span>';
-  } else if (labelled === 0) {
-    splitEl.innerHTML = '<p class="sub">No labelled expenses yet this week - tap the pill on an entry to set Need or Want, and the split appears here.</p>';
+  // The Stash note: biggest category, computed locally.
+  var note = document.getElementById("stashNote");
+  if (week.length > 0 && spent > 0) {
+    var byCat0 = {};
+    week.forEach(function (e) { byCat0[e.category] = (byCat0[e.category] || 0) + e.amount; });
+    var top0 = Object.keys(byCat0).sort(function (a, b) { return byCat0[b] - byCat0[a]; })[0];
+    document.getElementById("stashNoteText").textContent =
+      CAT_LABEL[top0] + " is your biggest category this week: " + rupees(byCat0[top0]) + " of " + rupees(spent) + ".";
+    note.style.display = "block";
   } else {
-    var nPct = Math.round((needSum / labelled) * 100);
-    var wPct = 100 - nPct;
-    var HOMEIC = '<svg viewBox="0 0 24 24" fill="none" stroke="#2f6f5e" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11 L12 4 L20 11"/><path d="M6 10 v9 h12 v-9"/></svg>';
-    var BAGIC = '<svg viewBox="0 0 24 24" fill="none" stroke="#b23a48" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8 h12 l-1 12 H7 z"/><path d="M9 8 a3 3 0 0 1 6 0"/></svg>';
-    splitEl.innerHTML =
-      '<div class="nwtiles">' +
-        '<div class="nwtile needs"><span class="cic" style="background:#dcf0d0">' + HOMEIC + '</span><span><span class="nl">Needs</span><br><span class="nv">' + rupees(needSum) + '</span><br><span class="np">' + nPct + '%</span></span></div>' +
-        '<div class="nwtile wants"><span class="cic" style="background:#fadde2">' + BAGIC + '</span><span><span class="nl">Wants</span><br><span class="nv">' + rupees(wantSum) + '</span><br><span class="np">' + wPct + '%</span></span></div>' +
-      '</div>' +
-      '<div class="propbar"><div class="pn" style="width:' + nPct + '%">' + (nPct >= 12 ? nPct + "%" : "") + '</div><div class="pw" style="width:' + wPct + '%">' + (wPct >= 12 ? wPct + "%" : "") + '</div></div>' +
-      '<p class="nwcaption">' + rupees(wantSum) + " went to wants - " + wPct + "% of your labelled spending.</p>";
+    note.style.display = "none";
   }
+  document.getElementById("homeEmpty").style.display = week.length === 0 ? "block" : "none";
 
-  // The insight rows.
-  var insEl = document.getElementById("insights");
-  insEl.innerHTML = "";
-  buildInsightRows(entries, week, spent, limit).forEach(function (r) {
-    var d = document.createElement("div");
-    d.className = "irow " + r.tone;
-    d.innerHTML = r.icon + '<span style="min-width:0"><span class="il">' + r.label + '</span>' +
-      '<div class="it">' + r.title + '</div>' +
-      (r.sub ? '<div class="is">' + r.sub + '</div>' : "") + '</span>';
-    insEl.appendChild(d);
-  });
-
-  // History summary: count, total, per-category tiles.
+  // --- History ---
+  document.getElementById("weekTotal").textContent = rupees(spent);
   document.getElementById("weekCount").textContent =
     week.length === 1 ? "1 expense" : week.length + " expenses";
-  document.getElementById("weekTotal").textContent = rupees(spent);
   var byCat = {};
-  week.forEach(function (e) {
-    byCat[e.category] = (byCat[e.category] || 0) + e.amount;
-  });
-  var tilesEl = document.getElementById("catTiles");
-  tilesEl.innerHTML = "";
-  Object.keys(byCat).sort(function (a, b) { return byCat[b] - byCat[a]; }).forEach(function (c) {
-    var t = document.createElement("div");
-    t.className = "ctile";
-    t.innerHTML = catIcon(c) + '<span><span class="cl">' + c + '</span><br><span class="cv">' +
-      rupees(byCat[c]) + "</span></span>";
-    tilesEl.appendChild(t);
-  });
+  week.forEach(function (e) { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
+  var ck = Object.keys(byCat).sort(function (a, b) { return byCat[b] - byCat[a]; });
+  document.getElementById("catSum").innerHTML = ck.map(function (c) {
+    return c + " <b>" + byCat[c] + "</b>";
+  }).join(" &middot; ");
 
   var listEl = document.getElementById("list");
   listEl.innerHTML = "";
   if (week.length === 0) {
-    listEl.innerHTML = '<span class="coon-empty" aria-hidden="true">' + COON + '</span>' +
-      '<p class="empty" style="text-align:center">Nothing logged yet this week.</p>';
+    listEl.innerHTML = '<div class="emptylist">Nothing logged yet this week.</div>';
   }
-  // Newest first.
   week.slice().reverse().forEach(function (e) {
     var row = document.createElement("div");
-    row.className = "entry";
-    row.innerHTML = catIcon(e.category);
-    var what = document.createElement("div");
-    what.className = "what";
-    var head = document.createElement("div");
-    head.style.cssText = "display:flex; align-items:center; gap:8px;";
-    var nm = document.createElement("span");
-    nm.textContent = e.category;
-    nm.style.fontWeight = "600";
-    head.appendChild(nm);
-    // The tappable Need/Want label.
-    var chip = document.createElement("button");
-    chip.className = "chip" + (e.kind ? " " + e.kind : "");
-    chip.style.marginTop = "0";
-    chip.style.minHeight = "24px";
-    chip.style.padding = "1px 10px";
-    chip.textContent = e.kind === "need" ? "Need" : e.kind === "want" ? "Want" : "Need / Want?";
-    chip.setAttribute("aria-label", "Label this expense as need or want");
-    chip.onclick = function () { cycleKind(e.id); };
-    head.appendChild(chip);
-    what.appendChild(head);
+    row.className = "r";
+    var mid = document.createElement("div");
+    var n1 = document.createElement("div");
+    n1.className = "n1";
+    n1.textContent = CAT_LABEL[e.category] || e.category;
+    mid.appendChild(n1);
     if (e.note) {
-      var note = document.createElement("div");
-      note.className = "note";
-      note.textContent = e.note;
-      what.appendChild(note);
+      var n2 = document.createElement("div");
+      n2.className = "n2";
+      n2.textContent = e.note;
+      mid.appendChild(n2);
     }
-    var amt = document.createElement("div");
+    // The tappable Need/Want label: tap to step through
+    // unlabelled -> need -> want -> unlabelled.
+    var pill = document.createElement("button");
+    pill.className = "pill" + (e.kind ? " " + e.kind : "");
+    pill.textContent = e.kind === "need" ? "need" : e.kind === "want" ? "want" : "need / want?";
+    pill.setAttribute("aria-label", "Label this expense as need or want");
+    pill.onclick = function () { cycleKind(e.id); };
+    mid.appendChild(pill);
+    var amt = document.createElement("span");
     amt.className = "amt";
     amt.textContent = rupees(e.amount);
-    // The ... menu holds the real delete action.
-    var wrap = document.createElement("div");
-    wrap.className = "menuwrap";
-    var keb = document.createElement("button");
-    keb.className = "kebab";
-    keb.innerHTML = "&#8942;";
-    keb.setAttribute("aria-label", "Options for this entry");
+    var dots = document.createElement("button");
+    dots.className = "dots";
+    dots.innerHTML = "&#8942;";
+    dots.setAttribute("aria-label", "Options for this entry");
     var menu = document.createElement("div");
     menu.className = "menu";
     var del = document.createElement("button");
     del.textContent = "Delete expense";
     del.onclick = function () { removeEntry(e.id); };
     menu.appendChild(del);
-    keb.onclick = function (ev) {
+    dots.onclick = function (ev) {
       ev.stopPropagation();
       document.querySelectorAll(".menu.open").forEach(function (m) { m.classList.remove("open"); });
       menu.classList.toggle("open");
     };
-    wrap.appendChild(keb); wrap.appendChild(menu);
-    row.appendChild(what); row.appendChild(amt); row.appendChild(wrap);
+    row.appendChild(mid); row.appendChild(amt); row.appendChild(dots); row.appendChild(menu);
     listEl.appendChild(row);
   });
+
+  // --- Insights ---
+  var needSum = sum(week.filter(function (e) { return e.kind === "need"; }));
+  var wantSum = sum(week.filter(function (e) { return e.kind === "want"; }));
+  var labelled = needSum + wantSum;
+  var nPct = labelled > 0 ? Math.round((needSum / labelled) * 100) : 0;
+  var wPct = labelled > 0 ? 100 - nPct : 0;
+  document.getElementById("nwA").style.width = nPct + "%";
+  document.getElementById("nwB").style.width = wPct + "%";
+  document.getElementById("nwNeeds").innerHTML = "needs <b>" + rupees(needSum) + "</b>";
+  document.getElementById("nwWants").innerHTML = labelled > 0
+    ? "wants <b>" + rupees(wantSum) + "</b> &middot; about " + wPct + "%"
+    : "wants <b>" + rupees(wantSum) + "</b>";
+
+  // biggest want row
+  var wants = week.filter(function (e) { return e.kind === "want"; });
+  var showBW = wants.length > 0;
+  document.getElementById("rowBiggestWant").style.display = showBW ? "flex" : "none";
+  document.getElementById("hrBiggestWant").style.display = showBW ? "block" : "none";
+  if (showBW) {
+    var wbc = {};
+    wants.forEach(function (e) { wbc[e.category] = (wbc[e.category] || 0) + e.amount; });
+    var bwTop = Object.keys(wbc).sort(function (a, b) { return wbc[b] - wbc[a]; })[0];
+    document.getElementById("bwCat").textContent = CAT_LABEL[bwTop].toLowerCase();
+    document.getElementById("bwAmt").textContent = rupees(wbc[bwTop]);
+  }
+
+  // budget pace row (estimate, labelled as such)
+  var showPace = limit !== null && week.length > 0;
+  document.getElementById("rowPace").style.display = showPace ? "flex" : "none";
+  document.getElementById("hrPace").style.display = showPace ? "block" : "none";
+  var projection = null;
+  if (showPace) {
+    projection = Math.round((spent / elapsedDays()) * 7);
+    document.getElementById("paceAmt").innerHTML = rupees(projection) + " <i>by sun</i>";
+    document.getElementById("paceAmt").className = "v" + (projection > limit ? " over" : "");
+  }
+
+  // the easy save: exactly half of wants, rounding admitted
+  var showSave = wantSum > 0;
+  document.getElementById("easySave").style.display = showSave ? "block" : "none";
+  if (showSave) {
+    var halfExact = wantSum / 2;
+    var halfRounded = Math.round(halfExact);
+    var rounded = halfExact !== halfRounded;
+    document.getElementById("easySaveAmt").textContent = (rounded ? "~" : "") + rupees(halfRounded);
+    document.getElementById("easySaveCap").innerHTML = rounded
+      ? "half of your wants (" + rupees(wantSum) + " = " + fmtExact(halfExact) + "). <span>shown rounded to the nearest rupee.</span>"
+      : "exactly half of your wants (" + rupees(wantSum) + "). <span>no rounding needed.</span>";
+  }
+
+  document.getElementById("insightsEmpty").style.display = week.length === 0 ? "block" : "none";
 }
 
 // ---------- Actions ----------
@@ -1002,12 +843,10 @@ function addEntry() {
   paintClear();
   justAddedAmount = entry.amount;
   render();
-  paintToast();
   showView("history");
+  paintToast();
 }
 
-// Tap the label on an entry to step through: unlabelled -> need ->
-// want -> unlabelled. You can always change your mind.
 function cycleKind(id) {
   var entries = loadEntries().map(function (e) {
     if (e.id !== id) return e;
@@ -1018,90 +857,116 @@ function cycleKind(id) {
   });
   if (!saveEntries(entries)) return;
   render();
+  refreshAiTip();
 }
 
 function removeEntry(id) {
   if (!saveEntries(loadEntries().filter(function (e) { return e.id !== id; }))) return;
   render();
+  refreshAiTip();
 }
 
-function saveLimitFromInput() {
-  var v = parseFloat(document.getElementById("limit").value);
-  if (!isNaN(v) && v >= 0) saveLimit(v);
-  render();
+// The weekly budget row on home: "set"/"change" swaps in a small
+// inline editor so you never leave the screen.
+function editLimit() {
+  var row = document.getElementById("limitRow");
+  row.innerHTML = "";
+  var l = document.createElement("span");
+  l.className = "l";
+  l.textContent = "weekly budget";
+  var input = document.createElement("input");
+  input.className = "limitin";
+  input.type = "number";
+  input.inputMode = "decimal";
+  input.min = "0";
+  var cur = loadLimit();
+  if (cur !== null) input.value = cur;
+  input.placeholder = "0";
+  var save = document.createElement("button");
+  save.className = "change";
+  save.textContent = "save";
+  save.onclick = function () {
+    var v = parseFloat(input.value);
+    if (!isNaN(v) && v >= 0) saveLimit(v);
+    restoreLimitRow();
+    render();
+    refreshAiTip();
+  };
+  row.appendChild(l); row.appendChild(input); row.appendChild(save);
+  input.focus();
+}
+function restoreLimitRow() {
+  var row = document.getElementById("limitRow");
+  row.innerHTML = '<span class="l">weekly budget</span><span class="v" id="tLimit">-</span><button class="change" id="limitChange">set</button>';
+  document.getElementById("limitChange").onclick = editLimit;
 }
 
 function wipeAll() {
-  if (confirm("Delete every entry and your limit from this phone?")) {
+  if (confirm("Delete every entry and your budget from this phone?")) {
     try {
       localStorage.removeItem(ENTRIES_KEY);
       localStorage.removeItem(LIMIT_KEY);
+      localStorage.removeItem(AITIP_KEY);
     } catch (e) {
       showStorageProblem("Could not delete. Storage is unavailable in this browser.");
       return;
     }
-    document.getElementById("limit").value = "";
     render();
+    paintAi("none");
   }
+}
+
+// ---------- Screens ----------
+// One screen at a time; the bottom bar switches them.
+// #home / #add / #history / #insights open a screen directly.
+function showView(name) {
+  var views = document.querySelectorAll(".view");
+  var found = false;
+  views.forEach(function (v) {
+    var on = v.id === "view-" + name;
+    v.classList.toggle("on", on);
+    if (on) found = true;
+  });
+  if (!found) {
+    name = "home";
+    views.forEach(function (v) { v.classList.toggle("on", v.id === "view-home"); });
+  }
+  document.querySelectorAll(".tab").forEach(function (t) {
+    t.classList.toggle("sel", t.getAttribute("data-view") === name);
+  });
+  window.scrollTo(0, 0);
+  if (name === "insights") refreshAiTip();
 }
 
 // ---------- Start ----------
 if (!probeStorage()) {
-  showStorageProblem("Saving is not working in this browser. Open this file with Chrome, not the built-in viewer.");
+  showStorageProblem("Saving is not working in this browser. Open stash in Chrome, not a built-in viewer.");
 }
 document.getElementById("addBtn").onclick = addEntry;
-document.getElementById("saveLimit").onclick = saveLimitFromInput;
 document.getElementById("wipe").onclick = wipeAll;
+document.getElementById("limitChange").onclick = editLimit;
 document.addEventListener("click", function () {
   document.querySelectorAll(".menu.open").forEach(function (m) { m.classList.remove("open"); });
 });
 document.getElementById("pickNeed").onclick = function () { pick("need"); };
 document.getElementById("pickWant").onclick = function () { pick("want"); };
-document.querySelectorAll(".catcard").forEach(function (b) {
-  b.onclick = function () {
-    pickedCategory = b.getAttribute("data-cat");
-    paintCats();
-  };
-});
 document.getElementById("amount").addEventListener("input", paintClear);
 document.getElementById("clearAmount").onclick = function () {
   document.getElementById("amount").value = "";
   paintClear();
   document.getElementById("amount").focus();
 };
-paintCats();
-paintClear();
-var savedLimit = loadLimit();
-if (savedLimit !== null) document.getElementById("limit").value = savedLimit;
-paintPicker();
-render();
-
-// ---------- Screens ----------
-// One section on screen at a time; the bottom bar switches them.
-// #home / #add / #history / #insights in the URL open that screen
-// directly - mostly so each screen can be checked on its own.
-function showView(name) {
-  var views = document.querySelectorAll(".view");
-  var found = false;
-  views.forEach(function (v) {
-    var on = v.id === "view-" + name;
-    v.hidden = !on;
-    if (on) found = true;
-  });
-  if (!found) name = "home", views.forEach(function (v) { v.hidden = v.id !== "view-home"; });
-  document.querySelectorAll(".tab").forEach(function (t) {
-    if (t.getAttribute("data-view") === name) t.setAttribute("aria-current", "page");
-    else t.removeAttribute("aria-current");
-  });
-  window.scrollTo(0, 0);
-  if (name !== "history") paintToast();   // toast belongs to the history screen
-}
 document.querySelectorAll(".tab").forEach(function (t) {
   t.onclick = function () { showView(t.getAttribute("data-view")); };
 });
 window.addEventListener("hashchange", function () {
   showView(location.hash.replace("#", "") || "home");
 });
+window.addEventListener("online", refreshAiTip);
+paintCats();
+paintClear();
+paintPicker();
+render();
 showView(location.hash.replace("#", "") || "home");
 </script>
 </body>
