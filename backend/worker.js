@@ -1,4 +1,4 @@
-// stash AI advisor - Cloudflare Worker (draft, not deployed)
+// stash AI advisor - Cloudflare Worker (live at https://stash-ai.shubhamsinghpage.workers.dev)
 //
 // What this does:
 //   1. Accepts ONLY the weekly summary shape (see summary-schema.md).
@@ -16,7 +16,7 @@
 const MAX_BYTES = 2048;
 const DAILY_CAP = 12;              // generous for one user, tiny for abuse
 const CATEGORY_ENUM = new Set(["food","travel","shopping","bills","college","fun","other"]);
-const FACT_KINDS = new Set(["biggest_category","wants_majority","pace","biggest_want","no_budget","low_data","repeat_category_days"]);
+const FACT_KINDS = new Set(["biggest_category","wants_majority","pace","no_budget","low_data"]);
 
 function num(v, min, max) {
   return typeof v === "number" && Number.isFinite(v) && v >= min && v <= max;
