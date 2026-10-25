@@ -195,7 +195,7 @@
 
   /* ---- gentle motion (v8): calm and short, never bouncy ----
      everything here is disabled when the phone asks for reduced motion */
-  @keyframes viewIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+  @keyframes viewIn { from { transform: translateY(7px); } to { transform: none; } }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   @keyframes rowFresh { 0% { background: #f3ede4; } 100% { background: transparent; } }
   .view.on { animation: viewIn .22s cubic-bezier(.2,.7,.3,1); }
