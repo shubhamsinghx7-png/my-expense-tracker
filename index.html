@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  stash - version 6
+  stash - version 8
   ------------------------------------------------------------------
   This whole app is ONE file. It runs in your phone's browser.
   Your expenses are saved ONLY on this phone (in this browser's
@@ -8,6 +8,10 @@
 
   New in version 6: a calm "ledger" look (paper, ink, one vermilion
   accent), and one new thing on the insights screen: STASH'S AI TIP.
+
+  New in version 8: gentle motion - screens fade in, bars ease
+  into place, the newest history row flashes once. If your phone is
+  set to reduce motion, all of it switches off automatically.
 
   HOW THE AI TIP WORKS (the honest version):
   - Your phone computes weekly TOTALS only: how much you spent, the
@@ -75,8 +79,9 @@
   .nav { margin-top: auto; display: flex; border-top: 1px solid var(--hair); padding: 14px 8px 20px; background: var(--paper); }
   .nav button { flex: 1; background: none; border: none; text-align: center; font: 700 12px system-ui; color: var(--muted); position: relative; padding: 2px 0 0; cursor: pointer; }
   .nav button.sel { color: var(--ink); }
-  .nav button.sel::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 4px; height: 4px;
-    border-radius: 50%; background: var(--accent); transform: translateX(-50%); }
+  .nav button::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 4px; height: 4px;
+    border-radius: 50%; background: var(--accent); transform: translateX(-50%); opacity: 0; }
+  .nav button.sel::after { opacity: 1; }
 
   /* HOME */
   .bignum { padding: 30px 22px 0; }
@@ -187,6 +192,26 @@
   /* storage warning banner, shown only when saving is impossible */
   .storagewarn { display: none; margin: 14px 22px 0; padding: 10px 12px; border: 1px solid #c24343;
     border-radius: 10px; font: 600 12.5px system-ui; color: #c24343; }
+
+  /* ---- gentle motion (v8): calm and short, never bouncy ----
+     everything here is disabled when the phone asks for reduced motion */
+  @keyframes viewIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes rowFresh { 0% { background: #f3ede4; } 100% { background: transparent; } }
+  .view.on { animation: viewIn .22s cubic-bezier(.2,.7,.3,1); }
+  .toastline { animation: fadeUp .25s ease-out; }
+  .aitip { animation: fadeUp .3s ease-out; }
+  .r.fresh { animation: rowFresh 1.4s ease-out; }
+  .prog .fill, .prop .bar .a, .prop .bar .b { transition: width .55s ease-out; }
+  .chip, .nav button, .savebtn, .seg button, .statrow .change { transition: transform .12s ease-out, background-color .18s ease-out, color .18s ease-out, border-color .18s ease-out; }
+  .chip:active, .nav button:active, .savebtn:active, .seg button:active { transform: scale(.97); }
+  .nav button::after { transition: opacity .18s ease-out; }
+  @media (prefers-reduced-motion: reduce) {
+    .view.on, .toastline, .aitip, .r.fresh { animation: none !important; }
+    .prog .fill, .prop .bar .a, .prop .bar .b,
+    .chip, .nav button, .savebtn, .seg button, .statrow .change,
+    .nav button::after { transition: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -478,6 +503,7 @@ function pick(kind) {
 
 // The "noted." toast on History: shows briefly, clears itself.
 var justAddedAmount = null;
+var justAddedId = null;
 var toastTimer = null;
 function paintToast() {
   var el = document.getElementById("addedToast");
@@ -649,6 +675,7 @@ function refreshAiTip() {
 
 // ---------- Drawing ----------
 function render() {
+  var pendingFresh = justAddedId; justAddedId = null;
   var entries = loadEntries();
   var week = thisWeekEntries();
   var spent = sum(week);
@@ -718,7 +745,7 @@ function render() {
   }
   week.slice().reverse().forEach(function (e) {
     var row = document.createElement("div");
-    row.className = "r";
+    row.className = "r" + (e.id === pendingFresh ? " fresh" : "");
     var mid = document.createElement("div");
     var n1 = document.createElement("div");
     n1.className = "n1";
@@ -846,6 +873,7 @@ function addEntry() {
   paintPicker();
   paintClear();
   justAddedAmount = entry.amount;
+  justAddedId = entry.id;
   render();
   showView("history");
   paintToast();
