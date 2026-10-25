@@ -19,13 +19,13 @@
   "facts": [                        // app-computed candidate facts the model may reference
     { "id": "P1", "kind": "biggest_category", "category": "food", "amount": 260, "share_pct": 41 },
     { "id": "P2", "kind": "wants_majority",   "wants": 370, "share_pct": 58 },
-    { "id": "P3", "kind": "pace",             "projection": 747, "budget": 860, "under_budget": true },
-    { "id": "P4", "kind": "biggest_want",     "category": "food", "amount": 140 }
+    { "id": "P3", "kind": "pace",             "projection": 747, "budget": 860, "under_budget": true }
   ]
 }
 
 # Fact kinds are a closed enum: biggest_category, wants_majority, pace,
-# biggest_want, no_budget, low_data, repeat_category_days.
+# no_budget, low_data. Single-expense facts (e.g. a biggest individual
+# expense) are never included: the approved scope is aggregates only.
 # The model must answer with a pattern_id from THIS list - it never writes numbers.
 
 # CONTRACT UPDATE (25 Oct, after live model testing):
