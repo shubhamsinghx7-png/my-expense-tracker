@@ -65,8 +65,34 @@ const SYSTEM = [
   "no new facts, no guarantees. Plain warm words, lowercase style is fine."
 ].join(" ");
 
+// CORS: browsers send a preflight OPTIONS before the app can POST.
+// Only the app's own origins may call - the GitHub Pages app and
+// local test servers. Anything else gets no allow-header and the
+// browser blocks it there.
+const ALLOWED_ORIGINS = new Set([
+  "https://shubhamsinghx7-png.github.io",
+  "http://127.0.0.1:8611",
+  "http://localhost:8611"
+]);
+function cors(request, extra) {
+  const origin = request.headers.get("Origin") || "";
+  const h = new Headers(extra);
+  if (ALLOWED_ORIGINS.has(origin)) {
+    h.set("Access-Control-Allow-Origin", origin);
+    h.set("Vary", "Origin");
+  }
+  return h;
+}
+
 export default {
   async fetch(request, env, ctx) {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: cors(request, {
+        "Access-Control-Allow-Methods": "POST",
+        "Access-Control-Allow-Headers": "content-type",
+        "Access-Control-Max-Age": "86400"
+      }) });
+    }
     if (request.method !== "POST") return new Response("method", { status: 405 });
     const len = Number(request.headers.get("content-length") || 0);
     if (len > MAX_BYTES) return new Response("too large", { status: 413 });
@@ -79,7 +105,7 @@ export default {
     const day = new Date().toISOString().slice(0, 10);
     const key = "calls:" + day;
     const used = Number(await env.STASH_LIMITS.get(key)) || 0;
-    if (used >= DAILY_CAP) return new Response("quiet day", { status: 429 });
+    if (used >= DAILY_CAP) return new Response("quiet day", { status: 429, headers: cors(request) });
     // counter increments only after a successful, validated answer (below)
 
     const userPrompt = "Weekly summary (aggregates only):\n" + JSON.stringify(body);
@@ -115,6 +141,9 @@ export default {
     if (!okId || !clean) return new Response("model off-script", { status: 502 });
 
     ctx.waitUntil(env.STASH_LIMITS.put(key, String(used + 1), { expirationTtl: 172800 }));
-    return Response.json({ pattern_id: parsed.pattern_id, suggestion: parsed.suggestion });
+    return new Response(JSON.stringify({ pattern_id: parsed.pattern_id, suggestion: parsed.suggestion }), {
+      status: 200,
+      headers: cors(request, { "Content-Type": "application/json" })
+    });
   }
 };
